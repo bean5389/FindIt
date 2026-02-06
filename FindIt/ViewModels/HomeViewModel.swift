@@ -15,6 +15,7 @@ final class HomeViewModel {
 
     func deleteItem(_ item: TargetItem, context: ModelContext) {
         context.delete(item)
+        HapticHelper.delete()
     }
 
     func startGame(with item: TargetItem) {

@@ -50,6 +50,7 @@ struct CapturePhotoView: View {
                             .padding()
                             .background(.black.opacity(0.5), in: Capsule())
                             .padding(.top, 60)
+                            .accessibilityLabel("카메라 프리뷰에서 등록할 사물을 탭하세요")
                         Spacer()
                     }
                 } else {
@@ -98,6 +99,7 @@ struct CapturePhotoView: View {
                     Spacer()
 
                     Button {
+                        HapticHelper.prepare(for: .medium)
                         Task {
                             if let image = await cameraService.capturePhoto() {
                                 viewModel.addPhoto(image)
@@ -113,18 +115,24 @@ struct CapturePhotoView: View {
                                     .frame(width: 62, height: 62)
                             }
                     }
+                    .accessibilityLabel("사진 촬영")
+                    .accessibilityHint("전체 사진을 촬영합니다")
 
                     Spacer()
 
                     if viewModel.canProceedToInfo {
                         Button("다음") {
+                            HapticHelper.buttonTap()
                             viewModel.proceedToInfo()
                         }
                         .fontWeight(.semibold)
+                        .accessibilityLabel("다음 단계로")
+                        .accessibilityHint("물건 정보 입력 화면으로 이동합니다")
                     } else {
                         Text("최소 3장")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+                            .accessibilityLabel("최소 3장 촬영 필요")
                     }
                 }
                 .padding(.horizontal)

@@ -54,6 +54,7 @@ struct SuccessView: View {
                 Spacer()
 
                 Button {
+                    HapticHelper.buttonTap()
                     onDismiss()
                 } label: {
                     Text("도감으로 돌아가기")
@@ -67,6 +68,9 @@ struct SuccessView: View {
                 }
                 .padding(.horizontal, 32)
                 .padding(.bottom, 40)
+                .buttonStyle(PulseButtonStyle())
+                .accessibilityLabel("도감으로 돌아가기")
+                .accessibilityHint("보물찾기를 마치고 도감으로 돌아갑니다")
             }
             .padding()
         }

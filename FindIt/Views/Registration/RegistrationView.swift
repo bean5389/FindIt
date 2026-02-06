@@ -21,18 +21,23 @@ struct RegistrationView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     if viewModel.currentStep == .info {
                         Button("이전") {
+                            HapticHelper.buttonTap()
                             viewModel.backToCapture()
                         }
+                        .accessibilityLabel("이전 단계로")
                     } else {
                         Button("취소") {
+                            HapticHelper.buttonTap()
                             dismiss()
                         }
+                        .accessibilityLabel("등록 취소")
                     }
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
                     if viewModel.currentStep == .info {
                         Button("저장") {
+                            HapticHelper.prepare(for: .medium)
                             Task {
                                 let success = await viewModel.save(context: modelContext)
                                 if success {
@@ -41,6 +46,8 @@ struct RegistrationView: View {
                             }
                         }
                         .disabled(!viewModel.canSave || viewModel.isProcessing)
+                        .accessibilityLabel("물건 저장")
+                        .accessibilityHint(viewModel.canSave ? "물건을 도감에 저장합니다" : "이름을 입력해주세요")
                     }
                 }
             }

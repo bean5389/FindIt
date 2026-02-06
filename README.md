@@ -84,7 +84,11 @@ FindIt/
 | Step 3: 데이터 & UI | 전체 화면 구현 | ✅ Done |
 | Step 4: LiDAR & 객체 선택 | ARKit LiDAR 프리뷰 + 탭 기반 사물 세그먼트 | ✅ Done |
 | Step 5: ML 파이프라인 | k-NN On-device 학습 + UI 피드백 | ✅ Done |
-| Step 6: 폴리싱 | 애니메이션, 햅틱, 이펙트 | 🔄 Pending |
+| Step 6: 폴리싱 | 애니메이션, 햅틱, 이펙트, 접근성 | ✅ Done |
+
+---
+
+**🎉 모든 단계 완료!** FindIt 앱이 완성되었습니다.
 
 ## 빌드 요구사항
 

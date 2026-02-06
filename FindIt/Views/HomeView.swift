@@ -85,8 +85,10 @@ struct HomeView: View {
     private var itemGrid: some View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: 16) {
-                ForEach(items) { item in
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                     itemCard(item)
+                        .transition(.scale.combined(with: .opacity))
+                        .animation(.spring(response: 0.4, dampingFraction: 0.7).delay(Double(index) * 0.05), value: items.count)
                 }
             }
             .padding()
@@ -135,6 +137,7 @@ struct HomeView: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
         .contextMenu {
             Button {
+                HapticHelper.buttonTap()
                 viewModel.startGame(with: item)
             } label: {
                 Label("게임 시작", systemImage: "play.fill")
@@ -147,12 +150,14 @@ struct HomeView: View {
             }
         }
         .onTapGesture {
+            HapticHelper.buttonTap()
             viewModel.startGame(with: item)
         }
     }
 
     private var gameStartButton: some View {
         Button {
+            HapticHelper.buttonTap()
             viewModel.startRandomGame(items: items)
         } label: {
             Label("랜덤 보물찾기 시작!", systemImage: "sparkles")
@@ -162,8 +167,10 @@ struct HomeView: View {
                 .padding()
                 .background(.blue, in: RoundedRectangle(cornerRadius: 16))
                 .foregroundStyle(.white)
+                .shadow(color: .blue.opacity(0.3), radius: 8, y: 4)
         }
         .padding()
+        .buttonStyle(PulseButtonStyle())
     }
 
     private var trainingOverlay: some View {
@@ -210,6 +217,16 @@ struct HomeView: View {
         }
         .transition(.scale.combined(with: .opacity))
         .animation(.spring(response: 0.3), value: viewModel.showTrainingComplete)
+    }
+}
+
+// MARK: - Button Styles
+
+struct PulseButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
     }
 }
 

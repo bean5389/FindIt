@@ -79,7 +79,7 @@ FindIt/
 | Step 3: 데이터 & UI | 전체 화면 구현 | ✅ Done |
 | Step 4: LiDAR & 객체 선택 | ARKit LiDAR 프리뷰 + 탭 기반 사물 세그먼트 + 깊이 기반 세그먼트 | ✅ Done |
 | Step 5: ML 파이프라인 | k-NN On-device 학습 + UI 피드백 | ✅ Done |
-| Step 6: 폴리싱 | 애니메이션, 햅틱, 이펙트 | 🔄 Pending |
+| Step 6: 폴리싱 | 애니메이션, 햅틱, 이펙트, 접근성 | ✅ Done |
 
 ### Step 4 구현 세부사항 (2026-02-06 완료)
 
@@ -121,6 +121,43 @@ FindIt/
 - 성능 메트릭 로깅 (학습/분류 시간 측정)
 - 자동 재학습 (아이템 추가/삭제 시)
 - 학습 상태 추적 (idle/training/ready/failed)
+
+### Step 6 구현 세부사항 (2026-02-06 완료)
+
+**✅ HapticHelper 강화**
+- 제너레이터 재사용으로 성능 개선 (캐싱)
+- prepare() 호출로 햅틱 지연 감소
+- 편의 메서드 추가 (buttonTap, itemCaptured, success, error, delete)
+- 5가지 impact 스타일 지원 (light, medium, heavy, soft, rigid)
+
+**✅ 햅틱 피드백 추가**
+- 버튼 탭 시 light impact
+- 사진 캡처 시 medium impact
+- 아이템 등록 완료 시 success notification
+- 아이템 삭제 시 rigid impact
+- 난이도 선택 시 selection feedback
+- 오류 발생 시 error notification
+
+**✅ 애니메이션 개선**
+- HomeView 카드 등장 애니메이션 (순차 delay)
+- MissionCard 단계별 등장 (제목 → 이미지 → 힌트 → 버튼)
+- PulseButtonStyle - 버튼 누름 효과 (spring 애니메이션)
+- SimilarityGauge pulse 애니메이션 (80% 이상 시)
+- SuccessView Confetti 효과 (이미 구현됨)
+
+**✅ 접근성 개선**
+- VoiceOver 레이블 추가 (모든 주요 UI 요소)
+- accessibilityHint로 상세 설명 제공
+- accessibilityValue로 동적 상태 전달
+- SimilarityGaugeView 음성 피드백 ("뜨거워요!", "차가워요" 등)
+- 난이도 선택 isSelected trait
+- 버튼 상태에 따른 hint 변경
+
+**✅ 비주얼 이펙트**
+- 버튼 그림자 효과 (green, blue 등)
+- Material 배경 (.ultraThinMaterial)
+- Scale & opacity 전환 효과
+- Rotation 애니메이션 (MissionCard 이미지)
 
 ## 빌드 요구사항
 

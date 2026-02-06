@@ -44,6 +44,7 @@ final class RegistrationViewModel {
     func addPhoto(_ image: UIImage) {
         let angle = currentAngleGuide
         capturedPhotos.append((image: image, angle: angle))
+        HapticHelper.itemCaptured()
     }
 
     func segmentAndAddPhoto(at point: CGPoint, in image: UIImage, depthMap: CVPixelBuffer? = nil) async {
@@ -86,6 +87,7 @@ final class RegistrationViewModel {
     func removePhoto(at index: Int) {
         guard capturedPhotos.indices.contains(index) else { return }
         capturedPhotos.remove(at: index)
+        HapticHelper.delete()
     }
 
     func proceedToInfo() {
@@ -135,10 +137,12 @@ final class RegistrationViewModel {
 
             try context.save()
             isProcessing = false
+            HapticHelper.success()
             return true
         } catch {
             errorMessage = error.localizedDescription
             isProcessing = false
+            HapticHelper.error()
             return false
         }
     }
