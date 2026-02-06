@@ -65,9 +65,10 @@ final class GameViewModel {
     }
 
     private func processFrame(_ cgImage: CGImage) async {
-        let score = await recognitionService.computeSimilarity(
+        let score = await recognitionService.computeHybridMatch(
             queryImage: cgImage,
-            featurePrintDataList: featurePrintDataList
+            targetID: targetItem.id,
+            references: featurePrintDataList
         )
 
         await MainActor.run {
@@ -78,6 +79,8 @@ final class GameViewModel {
     }
 
     private func updateFeedbackLevel(_ score: Float) {
+        let oldLevel = feedbackLevel
+        
         switch score {
         case 0.8...:
             feedbackLevel = .match
@@ -88,17 +91,32 @@ final class GameViewModel {
         default:
             feedbackLevel = .cold
         }
+        
+        // Haptic feedback on level change
+        if oldLevel != feedbackLevel {
+            switch feedbackLevel {
+            case .warm: HapticHelper.impact(.light)
+            case .hot: HapticHelper.impact(.medium)
+            case .match: HapticHelper.impact(.heavy)
+            case .cold: break
+            }
+        }
     }
 
     private func checkMatch(_ score: Float) {
         if score >= matchThreshold {
             if matchStartTime == nil {
                 matchStartTime = Date()
+                HapticHelper.impact(.medium)
             } else if let start = matchStartTime,
                       Date().timeIntervalSince(start) >= matchDuration {
                 isFound = true
+                HapticHelper.notification(.success) // Success haptic
                 cameraService.onFrame = nil
                 cameraService.stop()
+            } else {
+                // "Ticking" feel while holding match
+                HapticHelper.selection()
             }
         } else {
             matchStartTime = nil

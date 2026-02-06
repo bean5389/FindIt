@@ -10,8 +10,40 @@ struct CapturePhotoView: View {
             // Camera preview
             ZStack {
                 if isCameraReady {
-                    CameraPreviewView(session: cameraService.session)
-                        .ignoresSafeArea()
+                    GeometryReader { geo in
+                        Group {
+                            if cameraService.isLiDARAvailable {
+                                CameraPreviewView(arSession: cameraService.arSession)
+                            } else {
+                                CameraPreviewView(session: cameraService.session)
+                            }
+                        }
+                        .onTapGesture { location in
+                            // Normalize location (0 to 1)
+                            let normalizedPoint = CGPoint(
+                                x: location.x / geo.size.width,
+                                y: location.y / geo.size.height
+                            )
+
+                            Task {
+                                if let image = await cameraService.capturePhoto() {
+                                    await viewModel.segmentAndAddPhoto(at: normalizedPoint, in: image)
+                                }
+                            }
+                        }
+                    }
+                    .ignoresSafeArea()
+
+                    // Instruction overlay
+                    VStack {
+                        Text("사물을 탭해서 선택하세요")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                            .padding()
+                            .background(.black.opacity(0.5), in: Capsule())
+                            .padding(.top, 60)
+                        Spacer()
+                    }
                 } else {
                     Color.black
                         .overlay {

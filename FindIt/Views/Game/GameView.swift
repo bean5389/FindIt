@@ -39,14 +39,22 @@ struct GameView: View {
     private func gamePlayView(viewModel: GameViewModel) -> some View {
         ZStack {
             // Camera feed
-            CameraPreviewView(session: cameraService.session)
-                .ignoresSafeArea()
+            Group {
+                if cameraService.isLiDARAvailable {
+                    CameraPreviewView(arSession: cameraService.arSession)
+                } else {
+                    CameraPreviewView(session: cameraService.session)
+                }
+            }
+            .ignoresSafeArea()
 
             // Feedback border
             RoundedRectangle(cornerRadius: 0)
                 .stroke(viewModel.feedbackLevel.borderColor, lineWidth: viewModel.feedbackLevel.borderWidth)
                 .ignoresSafeArea()
-                .animation(.easeInOut(duration: 0.3), value: viewModel.feedbackLevel.borderWidth)
+                .opacity(viewModel.feedbackLevel == .hot || viewModel.feedbackLevel == .match ? animateBorder : 1.0)
+                .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: animateBorder)
+                .animation(.easeInOut(duration: 0.3), value: viewModel.feedbackLevel)
 
             // UI Overlay
             VStack {
@@ -57,34 +65,42 @@ struct GameView: View {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.title)
+                            .font(.system(size: 32))
                             .foregroundStyle(.white)
-                            .shadow(radius: 4)
+                            .shadow(color: .black.opacity(0.3), radius: 4)
                     }
 
                     Spacer()
 
                     VStack(alignment: .trailing, spacing: 2) {
                         Text(targetItem.name)
-                            .font(.headline)
+                            .font(.title3)
+                            .fontWeight(.bold)
                             .foregroundStyle(.white)
-                            .shadow(radius: 4)
+                            .shadow(color: .black.opacity(0.5), radius: 4)
 
                         Text("을(를) 찾는 중...")
                             .font(.caption)
-                            .foregroundStyle(.white.opacity(0.8))
-                            .shadow(radius: 4)
+                            .fontWeight(.medium)
+                            .foregroundStyle(.white.opacity(0.9))
+                            .shadow(color: .black.opacity(0.5), radius: 4)
                     }
                 }
-                .padding()
+                .padding(.top, 50)
+                .padding(.horizontal)
 
                 Spacer()
 
                 // Bottom similarity gauge
                 SimilarityGaugeView(similarity: viewModel.similarity)
-                    .padding(.horizontal, 32)
-                    .padding(.bottom, 40)
+                    .padding(.horizontal, 40)
+                    .padding(.bottom, 60)
             }
         }
+        .onAppear {
+            animateBorder = 0.6
+        }
     }
+    
+    @State private var animateBorder: Double = 1.0
 }

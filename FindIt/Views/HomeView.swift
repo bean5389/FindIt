@@ -44,6 +44,10 @@ struct HomeView: View {
                 }
             }
         }
+        .task(id: items) {
+            // Train/Retrain classifier whenever items change (add/delete)
+            await ClassifierService.shared.train(items: items)
+        }
     }
 
     private var emptyState: some View {

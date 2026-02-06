@@ -16,6 +16,8 @@ final class RegistrationViewModel {
     var errorMessage: String?
     var currentStep: RegistrationStep = .capture
 
+    private let segmentationService = SegmentationService.shared
+
     enum RegistrationStep {
         case capture
         case info
@@ -42,6 +44,35 @@ final class RegistrationViewModel {
     func addPhoto(_ image: UIImage) {
         let angle = currentAngleGuide
         capturedPhotos.append((image: image, angle: angle))
+    }
+
+    func segmentAndAddPhoto(at point: CGPoint, in image: UIImage) async {
+        isProcessing = true
+        errorMessage = nil
+
+        do {
+            guard let cgImage = image.cgImage else {
+                throw RegistrationError.segmentationFailed
+            }
+
+            // SegmentationService expects normalized point
+            if let segmented = try await segmentationService.segmentObject(at: point, in: cgImage) {
+                if let cropped = await segmentationService.cropToContent(segmented) {
+                    addPhoto(cropped)
+                } else {
+                    addPhoto(segmented)
+                }
+            } else {
+                // Fallback: add original if segmentation fails
+                addPhoto(image)
+            }
+        } catch {
+            errorMessage = "객체 선택 실패: \(error.localizedDescription)"
+            // Fallback: add original
+            addPhoto(image)
+        }
+
+        isProcessing = false
     }
 
     func removePhoto(at index: Int) {
@@ -107,10 +138,12 @@ final class RegistrationViewModel {
 
 enum RegistrationError: Error, LocalizedError {
     case thumbnailFailed
+    case segmentationFailed
 
     var errorDescription: String? {
         switch self {
         case .thumbnailFailed: "썸네일 생성에 실패했습니다."
+        case .segmentationFailed: "객체를 분리하는 데 실패했습니다."
         }
     }
 }
