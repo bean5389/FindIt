@@ -1,9 +1,37 @@
 import Vision
 import UIKit
 import CoreImage
+import CoreVideo
 
 actor SegmentationService {
     static let shared = SegmentationService()
+
+    /// Segments an object from the image using LiDAR depth data.
+    /// Returns the cropped image of the object with background removed.
+    func segmentObjectWithDepth(at point: CGPoint, in image: CGImage, depthMap: CVPixelBuffer) async throws -> UIImage? {
+        // 1. Get depth at tapped point
+        guard let targetDepth = getDepth(at: point, in: depthMap) else {
+            // Fallback to Vision-only segmentation
+            return try await segmentObject(at: point, in: image)
+        }
+
+        // 2. Create depth-based mask
+        let depthMask = createDepthMask(depthMap: depthMap, targetDepth: targetDepth, tolerance: 0.3)
+
+        // 3. Also use Vision for instance segmentation
+        let visionMask = try? await getVisionMask(at: point, in: image)
+
+        // 4. Combine depth mask with vision mask for better results
+        let combinedMask: CVPixelBuffer
+        if let visionMask = visionMask {
+            combinedMask = combineMasks(depthMask: depthMask, visionMask: visionMask)
+        } else {
+            combinedMask = depthMask
+        }
+
+        // 5. Apply mask to original image
+        return applyMask(combinedMask, to: image)
+    }
 
     /// Segments an object from the image based on a point.
     /// Returns the cropped image of the object.
@@ -19,14 +47,14 @@ actor SegmentationService {
         // 1. Get the instance identifier at the tapped point from instanceMask
         let instanceMask = result.instanceMask
         CVPixelBufferLockBaseAddress(instanceMask, .readOnly)
-        
+
         let width = CVPixelBufferGetWidth(instanceMask)
         let height = CVPixelBufferGetHeight(instanceMask)
-        
+
         // Map normalized point (0.0 - 1.0) to mask coordinates
         let x = Int(point.x * CGFloat(width))
         let y = Int(point.y * CGFloat(height))
-        
+
         var instanceId: UInt8 = 0
         if x >= 0 && x < width && y >= 0 && y < height {
             let baseAddress = CVPixelBufferGetBaseAddress(instanceMask)
@@ -34,9 +62,9 @@ actor SegmentationService {
             let buffer = baseAddress?.assumingMemoryBound(to: UInt8.self)
             instanceId = buffer?[y * bytesPerRow + x] ?? 0
         }
-        
+
         CVPixelBufferUnlockBaseAddress(instanceMask, .readOnly)
-        
+
         // 0 is typically the background
         guard instanceId > 0 else { return nil }
 
@@ -45,6 +73,144 @@ actor SegmentationService {
 
         // 3. Apply mask to the original image
         return applyMask(maskPixelBuffer, to: image)
+    }
+
+    // MARK: - Private Helpers
+
+    private func getDepth(at point: CGPoint, in depthMap: CVPixelBuffer) -> Float? {
+        CVPixelBufferLockBaseAddress(depthMap, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(depthMap, .readOnly) }
+
+        let width = CVPixelBufferGetWidth(depthMap)
+        let height = CVPixelBufferGetHeight(depthMap)
+        let x = Int(point.x * CGFloat(width))
+        let y = Int(point.y * CGFloat(height))
+
+        guard x >= 0 && x < width && y >= 0 && y < height else { return nil }
+
+        let baseAddress = CVPixelBufferGetBaseAddress(depthMap)
+        let floatBuffer = baseAddress?.assumingMemoryBound(to: Float32.self)
+        return floatBuffer?[y * width + x]
+    }
+
+    private func createDepthMask(depthMap: CVPixelBuffer, targetDepth: Float, tolerance: Float) -> CVPixelBuffer {
+        CVPixelBufferLockBaseAddress(depthMap, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(depthMap, .readOnly) }
+
+        let width = CVPixelBufferGetWidth(depthMap)
+        let height = CVPixelBufferGetHeight(depthMap)
+
+        // Create output mask buffer
+        var maskBuffer: CVPixelBuffer?
+        let attrs = [
+            kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_OneComponent8,
+            kCVPixelBufferWidthKey: width,
+            kCVPixelBufferHeightKey: height,
+            kCVPixelBufferIOSurfacePropertiesKey: [:]
+        ] as CFDictionary
+
+        CVPixelBufferCreate(kCFAllocatorDefault, width, height, kCVPixelFormatType_OneComponent8, attrs, &maskBuffer)
+
+        guard let mask = maskBuffer else { return depthMap }
+
+        CVPixelBufferLockBaseAddress(mask, [])
+        defer { CVPixelBufferUnlockBaseAddress(mask, []) }
+
+        let depthBase = CVPixelBufferGetBaseAddress(depthMap)?.assumingMemoryBound(to: Float32.self)
+        let maskBase = CVPixelBufferGetBaseAddress(mask)?.assumingMemoryBound(to: UInt8.self)
+
+        let minDepth = targetDepth - tolerance
+        let maxDepth = targetDepth + tolerance
+
+        for y in 0..<height {
+            for x in 0..<width {
+                let idx = y * width + x
+                let depth = depthBase?[idx] ?? 0
+
+                // If depth is within tolerance, mark as foreground (255), else background (0)
+                if depth >= minDepth && depth <= maxDepth && depth > 0 {
+                    maskBase?[idx] = 255
+                } else {
+                    maskBase?[idx] = 0
+                }
+            }
+        }
+
+        return mask
+    }
+
+    private func getVisionMask(at point: CGPoint, in image: CGImage) async throws -> CVPixelBuffer? {
+        let request = VNGenerateForegroundInstanceMaskRequest()
+        let handler = VNImageRequestHandler(cgImage: image, options: [:])
+        try handler.perform([request])
+
+        guard let result = request.results?.first else { return nil }
+
+        let instanceMask = result.instanceMask
+        CVPixelBufferLockBaseAddress(instanceMask, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(instanceMask, .readOnly) }
+
+        let width = CVPixelBufferGetWidth(instanceMask)
+        let height = CVPixelBufferGetHeight(instanceMask)
+        let x = Int(point.x * CGFloat(width))
+        let y = Int(point.y * CGFloat(height))
+
+        var instanceId: UInt8 = 0
+        if x >= 0 && x < width && y >= 0 && y < height {
+            let baseAddress = CVPixelBufferGetBaseAddress(instanceMask)
+            let bytesPerRow = CVPixelBufferGetBytesPerRow(instanceMask)
+            let buffer = baseAddress?.assumingMemoryBound(to: UInt8.self)
+            instanceId = buffer?[y * bytesPerRow + x] ?? 0
+        }
+
+        guard instanceId > 0 else { return nil }
+        return try result.generateMaskForInstances(withIdentifiers: [Int(instanceId)])
+    }
+
+    private func combineMasks(depthMask: CVPixelBuffer, visionMask: CVPixelBuffer) -> CVPixelBuffer {
+        CVPixelBufferLockBaseAddress(depthMask, .readOnly)
+        CVPixelBufferLockBaseAddress(visionMask, .readOnly)
+        defer {
+            CVPixelBufferUnlockBaseAddress(depthMask, .readOnly)
+            CVPixelBufferUnlockBaseAddress(visionMask, .readOnly)
+        }
+
+        let width = CVPixelBufferGetWidth(depthMask)
+        let height = CVPixelBufferGetHeight(depthMask)
+
+        // Create combined mask buffer
+        var combinedBuffer: CVPixelBuffer?
+        let attrs = [
+            kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_OneComponent8,
+            kCVPixelBufferWidthKey: width,
+            kCVPixelBufferHeightKey: height,
+            kCVPixelBufferIOSurfacePropertiesKey: [:]
+        ] as CFDictionary
+
+        CVPixelBufferCreate(kCFAllocatorDefault, width, height, kCVPixelFormatType_OneComponent8, attrs, &combinedBuffer)
+
+        guard let combined = combinedBuffer else { return depthMask }
+
+        CVPixelBufferLockBaseAddress(combined, [])
+        defer { CVPixelBufferUnlockBaseAddress(combined, []) }
+
+        let depthBase = CVPixelBufferGetBaseAddress(depthMask)?.assumingMemoryBound(to: UInt8.self)
+        let visionBase = CVPixelBufferGetBaseAddress(visionMask)?.assumingMemoryBound(to: UInt8.self)
+        let combinedBase = CVPixelBufferGetBaseAddress(combined)?.assumingMemoryBound(to: UInt8.self)
+
+        // Combine masks using AND operation (both must agree)
+        for y in 0..<height {
+            for x in 0..<width {
+                let idx = y * width + x
+                let depthVal = depthBase?[idx] ?? 0
+                let visionVal = visionBase?[idx] ?? 0
+
+                // Pixel is foreground only if both masks agree
+                combinedBase?[idx] = (depthVal > 128 && visionVal > 128) ? 255 : 0
+            }
+        }
+
+        return combined
     }
 
     private func applyMask(_ maskPixelBuffer: CVPixelBuffer, to image: CGImage) -> UIImage? {

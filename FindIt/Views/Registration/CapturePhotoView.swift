@@ -26,7 +26,15 @@ struct CapturePhotoView: View {
                             )
 
                             Task {
-                                if let image = await cameraService.capturePhoto() {
+                                // Use LiDAR depth if available
+                                if cameraService.isLiDARAvailable,
+                                   let capture = await cameraService.capturePhotoWithDepth() {
+                                    await viewModel.segmentAndAddPhoto(
+                                        at: normalizedPoint,
+                                        in: capture.image,
+                                        depthMap: capture.depthMap
+                                    )
+                                } else if let image = await cameraService.capturePhoto() {
                                     await viewModel.segmentAndAddPhoto(at: normalizedPoint, in: image)
                                 }
                             }

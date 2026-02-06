@@ -6,6 +6,8 @@
 ## 주요 기능
 
 ### 도감 등록 (Admin)
+- **LiDAR 카메라 프리뷰**에서 사물을 **탭으로 선택**
+- 탭 지점의 깊이로 사물 영역만 세그먼트 (배경 자동 제거)
 - 물건을 다각도로 촬영 (정면/뒷면/좌/우/위 가이드)
 - 촬영 즉시 Vision Feature Print 벡터 추출 및 저장
 - 이름, 힌트, 난이도 설정
@@ -23,19 +25,21 @@
 | 항목 | 기술 |
 |------|------|
 | Platform | iOS 18+ |
+| Hardware | **LiDAR 우선** (iPhone 12 Pro+, iPad Pro 2020+). LiDAR 없음 → Vision 전경 분리 폴백 |
 | Language | Swift 6 |
 | UI | SwiftUI |
 | Persistence | SwiftData |
-| 이미지 인식 | Vision Framework (`VNFeaturePrintObservation`) |
+| 캡처·깊이 | **ARKit (LiDAR)** + AVFoundation — 프리뷰, 객체 선택·세그먼트 |
+| 이미지 인식 | Vision Framework (`VNFeaturePrintObservation`) — 세그먼트 영역 기준 |
 | ML 분류 (예정) | CreateML On-device Training |
-| 카메라 | AVFoundation (8fps throttle) |
 | 외부 의존성 | 없음 (Apple 네이티브만 사용) |
 
 ## 인식 파이프라인
 
 ```
-카메라 프레임 (8fps)
-├── [1차] Vision Feature Print → 유사도 거리 계산 (가중치 0.6)
+카메라 + LiDAR 프리뷰
+├── [객체 선택] 사용자 탭 → 깊이 기반 세그먼트 → 관심 사물 영역 추출
+├── [1차] Vision Feature Print (세그먼트 영역) → 유사도 계산 (가중치 0.6)
 ├── [2차] CreateML Image Classifier → 카테고리 분류 (가중치 0.4, 예정)
 └── 가중치 조합 → 최종 Confidence Score
 ```
@@ -53,7 +57,8 @@ FindIt/
 │   ├── FeaturePrintService.swift # Vision 벡터 추출/비교
 │   ├── ClassifierService.swift   # CreateML 분류기 (스텁)
 │   ├── RecognitionService.swift  # 하이브리드 인식 조합
-│   └── CameraService.swift       # AVCaptureSession 관리
+│   ├── SegmentationService.swift # 깊이 기반 객체 세그먼트
+│   └── CameraService.swift       # AVCaptureSession / ARKit LiDAR 관리
 ├── ViewModels/
 │   ├── HomeViewModel.swift
 │   ├── RegistrationViewModel.swift
@@ -71,13 +76,14 @@ FindIt/
 
 | Phase | 설명 | 상태 |
 |-------|------|------|
-| Step 1: PoC | Feature Print 유사도 검증 | Done |
-| Step 2: 카메라 | 실시간 프레임 처리 | Done |
-| Step 3: 데이터 & UI | 전체 화면 구현 | Done |
-| Step 4: ML 파이프라인 | CreateML On-device 학습 | Pending |
-| Step 5: 폴리싱 | 애니메이션, 햅틱, 이펙트 | Pending |
+| Step 1: PoC | Feature Print 유사도 검증 | ✅ Done |
+| Step 2: 카메라 | 실시간 프레임 처리 | ✅ Done |
+| Step 3: 데이터 & UI | 전체 화면 구현 | ✅ Done |
+| Step 4: LiDAR & 객체 선택 | ARKit LiDAR 프리뷰 + 탭 기반 사물 세그먼트 | ✅ Done |
+| Step 5: ML 파이프라인 | CreateML On-device 학습 | 🔄 Pending |
+| Step 6: 폴리싱 | 애니메이션, 햅틱, 이펙트 | 🔄 Pending |
 
 ## 빌드 요구사항
 
 - Xcode 26.2+
-- iOS 18+ 디바이스 (카메라 필요)
+- iOS 18+ 디바이스. **LiDAR** 기기 권장, 없어도 카메라만으로 동일 플로우 지원 (Vision 전경 분리)

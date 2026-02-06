@@ -46,7 +46,7 @@ final class RegistrationViewModel {
         capturedPhotos.append((image: image, angle: angle))
     }
 
-    func segmentAndAddPhoto(at point: CGPoint, in image: UIImage) async {
+    func segmentAndAddPhoto(at point: CGPoint, in image: UIImage, depthMap: CVPixelBuffer? = nil) async {
         isProcessing = true
         errorMessage = nil
 
@@ -55,8 +55,16 @@ final class RegistrationViewModel {
                 throw RegistrationError.segmentationFailed
             }
 
-            // SegmentationService expects normalized point
-            if let segmented = try await segmentationService.segmentObject(at: point, in: cgImage) {
+            // Use depth-based segmentation if depth map is available (LiDAR)
+            let segmented: UIImage?
+            if let depthMap = depthMap {
+                segmented = try await segmentationService.segmentObjectWithDepth(at: point, in: cgImage, depthMap: depthMap)
+            } else {
+                // Fallback to Vision-only segmentation
+                segmented = try await segmentationService.segmentObject(at: point, in: cgImage)
+            }
+
+            if let segmented = segmented {
                 if let cropped = await segmentationService.cropToContent(segmented) {
                     addPhoto(cropped)
                 } else {

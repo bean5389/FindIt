@@ -74,12 +74,28 @@ FindIt/
 
 | Phase | 설명 | 상태 |
 |-------|------|------|
-| Step 1: PoC | Feature Print 유사도 검증 | Done |
-| Step 2: 카메라 | 실시간 프레임 처리 | Done |
-| Step 3: 데이터 & UI | 전체 화면 구현 | Done |
-| Step 4: LiDAR & 객체 선택 | ARKit LiDAR 프리뷰 + 탭 기반 사물 세그먼트 | Pending |
-| Step 5: ML 파이프라인 | CreateML On-device 학습 | Pending |
-| Step 6: 폴리싱 | 애니메이션, 햅틱, 이펙트 | Pending |
+| Step 1: PoC | Feature Print 유사도 검증 | ✅ Done |
+| Step 2: 카메라 | 실시간 프레임 처리 | ✅ Done |
+| Step 3: 데이터 & UI | 전체 화면 구현 | ✅ Done |
+| Step 4: LiDAR & 객체 선택 | ARKit LiDAR 프리뷰 + 탭 기반 사물 세그먼트 + 깊이 기반 세그먼트 | ✅ Done |
+| Step 5: ML 파이프라인 | CreateML On-device 학습 | 🔄 Pending |
+| Step 6: 폴리싱 | 애니메이션, 햅틱, 이펙트 | 🔄 Pending |
+
+### Step 4 구현 세부사항 (2026-02-06 완료)
+
+**✅ LiDAR 깊이 기반 세그먼테이션**
+- `SegmentationService.segmentObjectWithDepth()`: LiDAR 깊이 맵 활용
+- 탭한 지점의 깊이 값 추출 → 유사 깊이 영역만 분리
+- Vision 인스턴스 마스크와 깊이 마스크 결합 (AND 연산)
+- LiDAR 없는 기기는 자동으로 Vision-only 폴백
+
+**✅ CameraService 개선**
+- `capturePhotoWithDepth()`: ARFrame + 깊이 맵 동시 캡처
+- `smoothedSceneDepth` 우선, `sceneDepth` 폴백
+
+**✅ 등록 플로우 통합**
+- CapturePhotoView: LiDAR 사용 가능 시 깊이 데이터 전달
+- RegistrationViewModel: 깊이 맵 있으면 `segmentObjectWithDepth()` 사용
 
 ## 빌드 요구사항
 

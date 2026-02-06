@@ -117,6 +117,19 @@ final class CameraService: NSObject, @unchecked Sendable {
         }
     }
 
+    /// Captures current frame with depth map (LiDAR only)
+    func capturePhotoWithDepth() async -> (image: UIImage, depthMap: CVPixelBuffer)? {
+        guard isLiDARAvailable, let frame = arSession.currentFrame else { return nil }
+        guard let depthMap = frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap else { return nil }
+
+        let ciImage = CIImage(cvPixelBuffer: frame.capturedImage)
+        let context = CIContext()
+        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return nil }
+        let image = UIImage(cgImage: cgImage, scale: 1.0, orientation: .right)
+
+        return (image, depthMap)
+    }
+
     /// Performs a hit test or uses depth data to find the depth at a normalized point.
     func getDepth(at point: CGPoint) -> Float? {
         guard isLiDARAvailable, let frame = arSession.currentFrame else { return nil }
