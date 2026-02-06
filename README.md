@@ -31,7 +31,7 @@
 | Persistence | SwiftData |
 | 캡처·깊이 | **ARKit (LiDAR)** + AVFoundation — 프리뷰, 객체 선택·세그먼트 |
 | 이미지 인식 | Vision Framework (`VNFeaturePrintObservation`) — 세그먼트 영역 기준 |
-| ML 분류 (예정) | CreateML On-device Training |
+| ML 분류 | k-NN Classifier (k=3) — On-device 학습, 역거리 가중치 투표 |
 | 외부 의존성 | 없음 (Apple 네이티브만 사용) |
 
 ## 인식 파이프라인
@@ -40,8 +40,11 @@
 카메라 + LiDAR 프리뷰
 ├── [객체 선택] 사용자 탭 → 깊이 기반 세그먼트 → 관심 사물 영역 추출
 ├── [1차] Vision Feature Print (세그먼트 영역) → 유사도 계산 (가중치 0.6)
-├── [2차] CreateML Image Classifier → 카테고리 분류 (가중치 0.4, 예정)
+├── [2차] k-NN Classifier (k=3) → 아이템 분류 (가중치 0.4)
 └── 가중치 조합 → 최종 Confidence Score
+
+학습 파이프라인:
+아이템 등록/삭제 → 자동 재학습 (백그라운드) → k-NN 분류기 업데이트
 ```
 
 ## 프로젝트 구조
@@ -80,7 +83,7 @@ FindIt/
 | Step 2: 카메라 | 실시간 프레임 처리 | ✅ Done |
 | Step 3: 데이터 & UI | 전체 화면 구현 | ✅ Done |
 | Step 4: LiDAR & 객체 선택 | ARKit LiDAR 프리뷰 + 탭 기반 사물 세그먼트 | ✅ Done |
-| Step 5: ML 파이프라인 | CreateML On-device 학습 | 🔄 Pending |
+| Step 5: ML 파이프라인 | k-NN On-device 학습 + UI 피드백 | ✅ Done |
 | Step 6: 폴리싱 | 애니메이션, 햅틱, 이펙트 | 🔄 Pending |
 
 ## 빌드 요구사항

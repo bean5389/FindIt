@@ -78,7 +78,7 @@ FindIt/
 | Step 2: 카메라 | 실시간 프레임 처리 | ✅ Done |
 | Step 3: 데이터 & UI | 전체 화면 구현 | ✅ Done |
 | Step 4: LiDAR & 객체 선택 | ARKit LiDAR 프리뷰 + 탭 기반 사물 세그먼트 + 깊이 기반 세그먼트 | ✅ Done |
-| Step 5: ML 파이프라인 | CreateML On-device 학습 | 🔄 Pending |
+| Step 5: ML 파이프라인 | k-NN On-device 학습 + UI 피드백 | ✅ Done |
 | Step 6: 폴리싱 | 애니메이션, 햅틱, 이펙트 | 🔄 Pending |
 
 ### Step 4 구현 세부사항 (2026-02-06 완료)
@@ -96,6 +96,31 @@ FindIt/
 **✅ 등록 플로우 통합**
 - CapturePhotoView: LiDAR 사용 가능 시 깊이 데이터 전달
 - RegistrationViewModel: 깊이 맵 있으면 `segmentObjectWithDepth()` 사용
+
+### Step 5 구현 세부사항 (2026-02-06 완료)
+
+**✅ k-NN 기반 분류기 (On-device Learning)**
+- ClassifierService: Vision Feature Print 기반 k=3 최근접 이웃
+- 역거리 가중치 투표로 정확도 향상
+- 완전한 on-device 학습 (서버 불필요)
+- O(N) 선형 탐색 (< 1000개 아이템까지 효율적)
+
+**✅ 하이브리드 인식 파이프라인**
+- RecognitionService: Feature Print (0.6) + k-NN (0.4) 가중치 조합
+- 모델 없으면 자동으로 FP만 사용
+- 1:N 식별 & 1:1 검증 지원
+
+**✅ UI 피드백 시스템**
+- 학습 진행 상황 실시간 표시
+- 진행률 바 & 퍼센트 표시
+- 학습 완료 시 성공 애니메이션
+- 학습 샘플 수 & 소요 시간 표시
+
+**✅ 성능 최적화**
+- 백그라운드 학습 (UI 블로킹 없음)
+- 성능 메트릭 로깅 (학습/분류 시간 측정)
+- 자동 재학습 (아이템 추가/삭제 시)
+- 학습 상태 추적 (idle/training/ready/failed)
 
 ## 빌드 요구사항
 

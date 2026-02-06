@@ -13,40 +13,54 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                if items.isEmpty {
-                    emptyState
-                } else {
-                    itemGrid
-                }
+            ZStack {
+                VStack(spacing: 0) {
+                    if items.isEmpty {
+                        emptyState
+                    } else {
+                        itemGrid
+                    }
 
-                if !items.isEmpty {
-                    gameStartButton
-                }
-            }
-            .navigationTitle("보물찾기 도감")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        viewModel.showRegistration = true
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title2)
+                    if !items.isEmpty {
+                        gameStartButton
                     }
                 }
-            }
-            .sheet(isPresented: $viewModel.showRegistration) {
-                RegistrationView()
-            }
-            .fullScreenCover(isPresented: $viewModel.showGame) {
-                if let item = viewModel.selectedItem {
-                    GameView(targetItem: item)
+                .navigationTitle("보물찾기 도감")
+                .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            viewModel.showRegistration = true
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.title2)
+                        }
+                    }
+                }
+                .sheet(isPresented: $viewModel.showRegistration) {
+                    RegistrationView()
+                }
+                .fullScreenCover(isPresented: $viewModel.showGame) {
+                    if let item = viewModel.selectedItem {
+                        GameView(targetItem: item)
+                    }
+                }
+
+                // Training indicator overlay
+                if viewModel.isTraining {
+                    trainingOverlay
                 }
             }
         }
         .task(id: items) {
             // Train/Retrain classifier whenever items change (add/delete)
-            await ClassifierService.shared.train(items: items)
+            await viewModel.trainClassifier(items: items)
+        }
+        .task {
+            // Monitor training progress
+            while true {
+                await viewModel.updateTrainingProgress()
+                try? await Task.sleep(for: .milliseconds(100))
+            }
         }
     }
 
@@ -150,6 +164,52 @@ struct HomeView: View {
                 .foregroundStyle(.white)
         }
         .padding()
+    }
+
+    private var trainingOverlay: some View {
+        VStack(spacing: 16) {
+            Spacer()
+
+            VStack(spacing: 12) {
+                if viewModel.showTrainingComplete {
+                    // Success state
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.green)
+                        .symbolEffect(.bounce, value: viewModel.showTrainingComplete)
+
+                    Text(viewModel.trainingMessage)
+                        .font(.headline)
+                        .multilineTextAlignment(.center)
+                } else {
+                    // Training in progress
+                    ProgressView()
+                        .scaleEffect(1.2)
+                        .tint(.blue)
+
+                    Text(viewModel.trainingMessage)
+                        .font(.subheadline)
+
+                    if viewModel.trainingProgress > 0 {
+                        ProgressView(value: viewModel.trainingProgress)
+                            .frame(width: 200)
+                            .tint(.blue)
+
+                        Text("\(Int(viewModel.trainingProgress * 100))%")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .padding(24)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+            .shadow(color: .black.opacity(0.1), radius: 10)
+            .padding(.horizontal, 40)
+
+            Spacer()
+        }
+        .transition(.scale.combined(with: .opacity))
+        .animation(.spring(response: 0.3), value: viewModel.showTrainingComplete)
     }
 }
 
