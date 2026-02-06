@@ -51,6 +51,8 @@ final class RegistrationViewModel {
         isProcessing = true
         errorMessage = nil
 
+        print("🎯 탭 위치: (\(String(format: "%.2f", point.x)), \(String(format: "%.2f", point.y)))")
+
         do {
             guard let cgImage = image.cgImage else {
                 throw RegistrationError.segmentationFailed
@@ -59,23 +61,29 @@ final class RegistrationViewModel {
             // Use depth-based segmentation if depth map is available (LiDAR)
             let segmented: UIImage?
             if let depthMap = depthMap {
+                print("📡 LiDAR 깊이 기반 세그먼테이션 시작...")
                 segmented = try await segmentationService.segmentObjectWithDepth(at: point, in: cgImage, depthMap: depthMap)
             } else {
-                // Fallback to Vision-only segmentation
+                print("👁️ Vision 전용 세그먼테이션 시작...")
                 segmented = try await segmentationService.segmentObject(at: point, in: cgImage)
             }
 
             if let segmented = segmented {
+                print("✅ 세그먼테이션 성공 - 이미지 크기: \(segmented.size)")
                 if let cropped = await segmentationService.cropToContent(segmented) {
+                    print("✂️ 크롭 완료 - 크기: \(cropped.size)")
                     addPhoto(cropped)
                 } else {
+                    print("⚠️ 크롭 실패 - 원본 세그먼트 사용")
                     addPhoto(segmented)
                 }
             } else {
-                // Fallback: add original if segmentation fails
+                print("❌ 세그먼테이션 실패 - 원본 이미지 사용")
+                errorMessage = "배경 제거 실패 (원본 저장됨)"
                 addPhoto(image)
             }
         } catch {
+            print("❌ 오류 발생: \(error.localizedDescription)")
             errorMessage = "객체 선택 실패: \(error.localizedDescription)"
             // Fallback: add original
             addPhoto(image)
