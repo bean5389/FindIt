@@ -7,10 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2BC53E932F35E9E5006AEECE /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 2BC53E922F35E9E5006AEECE /* README.md */; };
 		2BEAD34B2F35D65400EE87EF /* FindIt_Spec.md in Resources */ = {isa = PBXBuildFile; fileRef = 2BEAD34A2F35D65400EE87EF /* FindIt_Spec.md */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		2BC53E922F35E9E5006AEECE /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		2BEAD33A2F35D50000EE87EF /* FindIt.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FindIt.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2BEAD34A2F35D65400EE87EF /* FindIt_Spec.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = FindIt_Spec.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -37,6 +39,7 @@
 		2BEAD3312F35D50000EE87EF = {
 			isa = PBXGroup;
 			children = (
+				2BC53E922F35E9E5006AEECE /* README.md */,
 				2BEAD34A2F35D65400EE87EF /* FindIt_Spec.md */,
 				2BEAD33C2F35D50000EE87EF /* FindIt */,
 				2BEAD33B2F35D50000EE87EF /* Products */,
@@ -115,6 +118,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2BC53E932F35E9E5006AEECE /* README.md in Resources */,
 				2BEAD34B2F35D65400EE87EF /* FindIt_Spec.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
