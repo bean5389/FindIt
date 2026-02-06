@@ -75,6 +75,105 @@ actor SegmentationService {
         return applyMask(maskPixelBuffer, to: image)
     }
 
+    // MARK: - Instance Detection
+
+    /// Detect all instances in the image and return their contours
+    func detectInstances(in image: CGImage) async throws -> [DetectedInstance] {
+        let request = VNGenerateForegroundInstanceMaskRequest()
+        let handler = VNImageRequestHandler(cgImage: image, options: [:])
+        try handler.perform([request])
+
+        guard let result = request.results?.first else {
+            return []
+        }
+
+        let instanceMask = result.instanceMask
+        CVPixelBufferLockBaseAddress(instanceMask, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(instanceMask, .readOnly) }
+
+        let width = CVPixelBufferGetWidth(instanceMask)
+        let height = CVPixelBufferGetHeight(instanceMask)
+
+        // Find all unique instance IDs (excluding background 0)
+        var instanceIds = Set<UInt8>()
+        let baseAddress = CVPixelBufferGetBaseAddress(instanceMask)
+        let bytesPerRow = CVPixelBufferGetBytesPerRow(instanceMask)
+        let buffer = baseAddress?.assumingMemoryBound(to: UInt8.self)
+
+        for y in 0..<height {
+            for x in 0..<width {
+                let id = buffer?[y * bytesPerRow + x] ?? 0
+                if id > 0 {
+                    instanceIds.insert(id)
+                }
+            }
+        }
+
+        // Generate masks and contours for each instance
+        var instances: [DetectedInstance] = []
+        for instanceId in instanceIds {
+            if let maskBuffer = try? result.generateMask(forInstances: [Int(instanceId)]) {
+                let contour = extractContour(from: maskBuffer)
+                instances.append(DetectedInstance(
+                    id: instanceId,
+                    contour: contour,
+                    maskBuffer: maskBuffer
+                ))
+            }
+        }
+
+        return instances
+    }
+
+    struct DetectedInstance: Sendable {
+        let id: UInt8
+        let contour: [CGPoint]  // Normalized coordinates (0.0 - 1.0)
+        let maskBuffer: CVPixelBuffer
+    }
+
+    /// Segment object using a pre-detected instance mask
+    func segmentWithMask(_ maskBuffer: CVPixelBuffer, in image: CGImage) async -> UIImage? {
+        return applyMask(maskBuffer, to: image)
+    }
+
+    private func extractContour(from maskBuffer: CVPixelBuffer) -> [CGPoint] {
+        CVPixelBufferLockBaseAddress(maskBuffer, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(maskBuffer, .readOnly) }
+
+        let width = CVPixelBufferGetWidth(maskBuffer)
+        let height = CVPixelBufferGetHeight(maskBuffer)
+        let baseAddress = CVPixelBufferGetBaseAddress(maskBuffer)
+        let buffer = baseAddress?.assumingMemoryBound(to: UInt8.self)
+
+        var contourPoints: [CGPoint] = []
+
+        // Simple edge detection - find pixels at the boundary
+        for y in 1..<(height - 1) {
+            for x in 1..<(width - 1) {
+                let idx = y * width + x
+                let current = buffer?[idx] ?? 0
+
+                if current > 128 {  // Foreground pixel
+                    // Check if it's an edge (has background neighbor)
+                    let top = buffer?[(y - 1) * width + x] ?? 0
+                    let bottom = buffer?[(y + 1) * width + x] ?? 0
+                    let left = buffer?[y * width + (x - 1)] ?? 0
+                    let right = buffer?[y * width + (x + 1)] ?? 0
+
+                    if top < 128 || bottom < 128 || left < 128 || right < 128 {
+                        // Normalize to 0.0 - 1.0
+                        contourPoints.append(CGPoint(
+                            x: CGFloat(x) / CGFloat(width),
+                            y: CGFloat(y) / CGFloat(height)
+                        ))
+                    }
+                }
+            }
+        }
+
+        return contourPoints
+    }
+
     // MARK: - Private Helpers
 
     private func getDepth(at point: CGPoint, in depthMap: CVPixelBuffer) -> Float? {

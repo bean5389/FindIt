@@ -7,6 +7,9 @@ struct CapturePhotoView: View {
     @State private var tapLocation: CGPoint?
     @State private var showTapIndicator = false
     @State private var segmentationStatus: String = ""
+    @State private var detectedInstances: [SegmentationService.DetectedInstance] = []
+    @State private var isDetecting = false
+    @State private var currentFrame: CGImage?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -34,18 +37,48 @@ struct CapturePhotoView: View {
                             )
 
                             Task {
-                                segmentationStatus = "세그먼테이션 중..."
+                                segmentationStatus = "사물 선택 중..."
 
-                                // Use LiDAR depth if available
-                                if cameraService.isLiDARAvailable,
-                                   let capture = await cameraService.capturePhotoWithDepth() {
-                                    await viewModel.segmentAndAddPhoto(
-                                        at: normalizedPoint,
-                                        in: capture.image,
-                                        depthMap: capture.depthMap
-                                    )
-                                } else if let image = await cameraService.capturePhoto() {
-                                    await viewModel.segmentAndAddPhoto(at: normalizedPoint, in: image)
+                                // Find which instance was tapped
+                                let selectedInstance = detectedInstances.first { instance in
+                                    // Check if tap is inside this instance's contour
+                                    isPointInContour(normalizedPoint, contour: instance.contour)
+                                }
+
+                                if let selectedInstance = selectedInstance {
+                                    print("✅ 인스턴스 \(selectedInstance.id) 선택됨")
+                                    segmentationStatus = "선택된 사물 추출 중..."
+
+                                    // Capture current frame
+                                    if let frame = currentFrame {
+                                        let uiImage = UIImage(cgImage: frame, scale: 1.0, orientation: .right)
+                                        await viewModel.segmentAndAddPhotoWithMask(
+                                            selectedInstance.maskBuffer,
+                                            in: uiImage
+                                        )
+                                    } else {
+                                        segmentationStatus = "⚠️ 프레임 캡처 실패"
+                                        HapticHelper.error()
+                                        try? await Task.sleep(for: .seconds(2))
+                                        segmentationStatus = ""
+                                        showTapIndicator = false
+                                        return
+                                    }
+                                } else {
+                                    print("⚠️ 탭한 위치에 인스턴스 없음 - 일반 세그먼테이션 시도")
+                                    segmentationStatus = "일반 추출 중..."
+
+                                    // Fallback to normal segmentation
+                                    if cameraService.isLiDARAvailable,
+                                       let capture = await cameraService.capturePhotoWithDepth() {
+                                        await viewModel.segmentAndAddPhoto(
+                                            at: normalizedPoint,
+                                            in: capture.image,
+                                            depthMap: capture.depthMap
+                                        )
+                                    } else if let image = await cameraService.capturePhoto() {
+                                        await viewModel.segmentAndAddPhoto(at: normalizedPoint, in: image)
+                                    }
                                 }
 
                                 // Check if successful
@@ -68,9 +101,48 @@ struct CapturePhotoView: View {
                     }
                     .ignoresSafeArea()
 
+                    // Instance contours overlay
+                    if !detectedInstances.isEmpty {
+                        GeometryReader { geo in
+                            Canvas { context, size in
+                                for instance in detectedInstances {
+                                    var path = Path()
+
+                                    // Draw contour
+                                    for (index, point) in instance.contour.enumerated() {
+                                        let scaledPoint = CGPoint(
+                                            x: point.x * size.width,
+                                            y: point.y * size.height
+                                        )
+
+                                        if index == 0 {
+                                            path.move(to: scaledPoint)
+                                        } else {
+                                            path.addLine(to: scaledPoint)
+                                        }
+                                    }
+
+                                    // Stroke the contour
+                                    context.stroke(
+                                        path,
+                                        with: .color(.green.opacity(0.8)),
+                                        lineWidth: 2
+                                    )
+
+                                    // Fill with semi-transparent green
+                                    context.fill(
+                                        path,
+                                        with: .color(.green.opacity(0.1))
+                                    )
+                                }
+                            }
+                        }
+                        .allowsHitTesting(false)
+                    }
+
                     // Instruction overlay
                     VStack {
-                        Text("사물을 탭해서 선택하세요")
+                        Text(detectedInstances.isEmpty ? "사물 감지 중..." : "윤곽선을 탭해서 선택하세요")
                             .font(.headline)
                             .foregroundStyle(.white)
                             .padding()
@@ -203,11 +275,29 @@ struct CapturePhotoView: View {
             let granted = await cameraService.requestPermission()
             if granted {
                 cameraService.configure()
+
+                // Set up frame callback for real-time instance detection
+                cameraService.onFrame = { [weak cameraService] cgImage in
+                    guard let cameraService, !isDetecting else { return }
+                    currentFrame = cgImage
+
+                    Task {
+                        isDetecting = true
+                        if let instances = try? await SegmentationService.shared.detectInstances(in: cgImage) {
+                            await MainActor.run {
+                                detectedInstances = instances
+                            }
+                        }
+                        isDetecting = false
+                    }
+                }
+
                 cameraService.start()
                 isCameraReady = true
             }
         }
         .onDisappear {
+            cameraService.onFrame = nil
             cameraService.stop()
         }
     }
@@ -220,5 +310,33 @@ struct CapturePhotoView: View {
             .padding(.horizontal, 24)
             .padding(.vertical, 12)
             .background(.black.opacity(0.6), in: Capsule())
+    }
+
+    // MARK: - Helper Functions
+
+    /// Check if a point is inside a contour using ray casting algorithm
+    private func isPointInContour(_ point: CGPoint, contour: [CGPoint]) -> Bool {
+        guard contour.count > 2 else { return false }
+
+        var inside = false
+        var j = contour.count - 1
+
+        for i in 0..<contour.count {
+            let xi = contour[i].x
+            let yi = contour[i].y
+            let xj = contour[j].x
+            let yj = contour[j].y
+
+            let intersect = ((yi > point.y) != (yj > point.y))
+                && (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi)
+
+            if intersect {
+                inside.toggle()
+            }
+
+            j = i
+        }
+
+        return inside
     }
 }

@@ -47,6 +47,41 @@ final class RegistrationViewModel {
         HapticHelper.itemCaptured()
     }
 
+    /// Segment and add photo using a pre-detected instance mask
+    func segmentAndAddPhotoWithMask(_ maskBuffer: CVPixelBuffer, in image: UIImage) async {
+        isProcessing = true
+        errorMessage = nil
+
+        print("🎨 사전 감지된 마스크로 세그먼테이션 시작...")
+
+        do {
+            guard let cgImage = image.cgImage else {
+                throw RegistrationError.segmentationFailed
+            }
+
+            if let segmented = await segmentationService.segmentWithMask(maskBuffer, in: cgImage) {
+                print("✅ 세그먼테이션 성공 - 이미지 크기: \(segmented.size)")
+                if let cropped = await segmentationService.cropToContent(segmented) {
+                    print("✂️ 크롭 완료 - 크기: \(cropped.size)")
+                    addPhoto(cropped)
+                } else {
+                    print("⚠️ 크롭 실패 - 원본 세그먼트 사용")
+                    addPhoto(segmented)
+                }
+            } else {
+                print("❌ 세그먼테이션 실패 - 원본 이미지 사용")
+                errorMessage = "배경 제거 실패 (원본 저장됨)"
+                addPhoto(image)
+            }
+        } catch {
+            print("❌ 오류 발생: \(error.localizedDescription)")
+            errorMessage = "객체 선택 실패: \(error.localizedDescription)"
+            addPhoto(image)
+        }
+
+        isProcessing = false
+    }
+
     func segmentAndAddPhoto(at point: CGPoint, in image: UIImage, depthMap: CVPixelBuffer? = nil) async {
         isProcessing = true
         errorMessage = nil
