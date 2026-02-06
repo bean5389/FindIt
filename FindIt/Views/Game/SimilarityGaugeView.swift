@@ -33,7 +33,7 @@ struct SimilarityGaugeView: View {
                     .fontWeight(.bold)
                     .foregroundStyle(.white.opacity(0.8))
             }
-            .scaleEffect(similarity >= 0.8 ? pulse : 1.0)
+            .scaleEffect(similarity >= 0.65 ? pulse : 1.0)
             .monospacedDigit()
         }
         .accessibilityElement(children: .combine)
@@ -48,18 +48,18 @@ struct SimilarityGaugeView: View {
 
     private var accessibilityFeedback: String {
         switch similarity {
-        case 0.8...: return "매우 가까워요! 거의 다 찾았어요!"
-        case 0.6..<0.8: return "뜨거워요! 가까워지고 있어요"
-        case 0.3..<0.6: return "따뜻해요. 방향이 맞아요"
+        case 0.65...: return "매우 가까워요! 거의 다 찾았어요!"
+        case 0.5..<0.65: return "뜨거워요! 가까워지고 있어요"
+        case 0.25..<0.5: return "따뜻해요. 방향이 맞아요"
         default: return "차가워요. 다른 곳을 찾아보세요"
         }
     }
 
     private var gaugeColor: Color {
         switch similarity {
-        case 0.8...: .green
-        case 0.6..<0.8: .orange
-        case 0.3..<0.6: .yellow
+        case 0.65...: .green
+        case 0.5..<0.65: .orange
+        case 0.25..<0.5: .yellow
         default: .gray
         }
     }

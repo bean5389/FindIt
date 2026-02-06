@@ -5,7 +5,7 @@ import ARKit
 @Observable
 final class CameraService: NSObject, @unchecked Sendable {
     // Standard camera properties
-    private let session = AVCaptureSession()
+    let session = AVCaptureSession()
     private let sessionQueue = DispatchQueue(label: "me.bean5389.FindIt.camera")
     private let videoOutput = AVCaptureVideoDataOutput()
     private let photoOutput = AVCapturePhotoOutput()
@@ -30,8 +30,8 @@ final class CameraService: NSObject, @unchecked Sendable {
 
     private var photoContinuation: CheckedContinuation<UIImage?, Never>?
 
-    // Throttle: process at most ~8 fps
-    private let frameInterval: TimeInterval = 1.0 / 8.0
+    // Throttle: process at most ~12 fps (improved from 8fps for better recognition)
+    private let frameInterval: TimeInterval = 1.0 / 12.0
     @ObservationIgnored
     private nonisolated(unsafe) var lastFrameTime: TimeInterval = 0
 

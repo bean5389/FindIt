@@ -13,16 +13,16 @@ final class GameViewModel {
 
     private var matchStartTime: Date?
     private let matchDuration: TimeInterval = 1.0
-    private let matchThreshold: Float = 0.8
+    private let matchThreshold: Float = 0.65  // Lowered from 0.8 for better recognition
 
     private var featurePrintDataList: [Data] = []
     private let recognitionService = RecognitionService.shared
 
     enum FeedbackLevel: Sendable {
-        case cold    // < 0.3
-        case warm    // 0.3 ~ 0.6
-        case hot     // 0.6 ~ 0.8
-        case match   // >= 0.8
+        case cold    // < 0.25
+        case warm    // 0.25 ~ 0.5
+        case hot     // 0.5 ~ 0.65
+        case match   // >= 0.65
 
         var borderColor: Color {
             switch self {
@@ -80,18 +80,23 @@ final class GameViewModel {
 
     private func updateFeedbackLevel(_ score: Float) {
         let oldLevel = feedbackLevel
-        
+
         switch score {
-        case 0.8...:
+        case 0.65...:
             feedbackLevel = .match
-        case 0.6..<0.8:
+        case 0.5..<0.65:
             feedbackLevel = .hot
-        case 0.3..<0.6:
+        case 0.25..<0.5:
             feedbackLevel = .warm
         default:
             feedbackLevel = .cold
         }
-        
+
+        // Debug logging
+        if oldLevel != feedbackLevel || score > 0.3 {
+            print("📊 Similarity: \(String(format: "%.3f", score)) → \(feedbackLevel)")
+        }
+
         // Haptic feedback on level change
         if oldLevel != feedbackLevel {
             switch feedbackLevel {

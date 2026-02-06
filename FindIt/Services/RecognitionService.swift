@@ -7,9 +7,9 @@ actor RecognitionService {
     private let featurePrintService = FeaturePrintService.shared
     private let classifierService = ClassifierService.shared
 
-    // Weights for hybrid score
-    private let fpWeight: Float = 0.6
-    private let mlWeight: Float = 0.4
+    // Weights for hybrid score (Feature Print is more reliable)
+    private let fpWeight: Float = 0.8
+    private let mlWeight: Float = 0.2
 
     struct RecognitionResult: Sendable {
         let itemID: UUID

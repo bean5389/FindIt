@@ -15,8 +15,8 @@ actor SegmentationService {
             return try await segmentObject(at: point, in: image)
         }
 
-        // 2. Create depth-based mask
-        let depthMask = createDepthMask(depthMap: depthMap, targetDepth: targetDepth, tolerance: 0.3)
+        // 2. Create depth-based mask (tolerance 0.5m for more forgiving segmentation)
+        let depthMask = createDepthMask(depthMap: depthMap, targetDepth: targetDepth, tolerance: 0.5)
 
         // 3. Also use Vision for instance segmentation
         let visionMask = try? await getVisionMask(at: point, in: image)
@@ -69,7 +69,7 @@ actor SegmentationService {
         guard instanceId > 0 else { return nil }
 
         // 2. Generate the mask for the specific instance identifier
-        let maskPixelBuffer = try result.generateMaskForInstances(withIdentifiers: [Int(instanceId)])
+        let maskPixelBuffer = try result.generateMask(forInstances: [Int(instanceId)])
 
         // 3. Apply mask to the original image
         return applyMask(maskPixelBuffer, to: image)
@@ -164,7 +164,7 @@ actor SegmentationService {
         }
 
         guard instanceId > 0 else { return nil }
-        return try result.generateMaskForInstances(withIdentifiers: [Int(instanceId)])
+        return try result.generateMask(forInstances: [Int(instanceId)])
     }
 
     private func combineMasks(depthMask: CVPixelBuffer, visionMask: CVPixelBuffer) -> CVPixelBuffer {
