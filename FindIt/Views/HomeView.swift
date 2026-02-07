@@ -3,114 +3,109 @@ import SwiftData
 
 struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \TargetItem.createdAt, order: .reverse) private var items: [TargetItem]
-    @State private var viewModel = HomeViewModel()
-
-    private let columns = [
-        GridItem(.flexible()),
-        GridItem(.flexible()),
-    ]
+    @Query(sort: \TreasureItem.createdAt, order: .reverse) private var items: [TreasureItem]
+    @State private var showingCapture = false
+    @State private var formData: CapturedData?
+    
+    struct CapturedData: Identifiable {
+        let id = UUID()
+        let image: UIImage
+        let featurePrint: Data
+    }
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                VStack(spacing: 0) {
-                    if items.isEmpty {
-                        emptyState
-                    } else {
-                        itemGrid
-                    }
-
-                    if !items.isEmpty {
-                        gameStartButton
-                    }
-                }
-                .navigationTitle("보물찾기 도감")
-                .toolbar {
-                    ToolbarItem(placement: .primaryAction) {
-                        Button {
-                            viewModel.showRegistration = true
-                        } label: {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.title2)
-                        }
-                    }
-                }
-                .sheet(isPresented: $viewModel.showRegistration) {
-                    RegistrationView()
-                }
-                .fullScreenCover(isPresented: $viewModel.showGame) {
-                    if let item = viewModel.selectedItem {
-                        GameView(targetItem: item)
-                    }
-                }
-
-                // Training indicator overlay
-                if viewModel.isTraining {
-                    trainingOverlay
+            Group {
+                if items.isEmpty {
+                    emptyStateView
+                } else {
+                    treasureGridView
                 }
             }
-        }
-        .task(id: items) {
-            // Train/Retrain classifier whenever items change (add/delete)
-            await viewModel.trainClassifier(items: items)
-        }
-        .task {
-            // Monitor training progress
-            while true {
-                await viewModel.updateTrainingProgress()
-                try? await Task.sleep(for: .milliseconds(100))
+            .navigationTitle("보물 도감")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showingCapture = true
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.title2)
+                    }
+                }
+            }
+            .fullScreenCover(isPresented: $showingCapture) {
+                CapturePhotoView { image, featurePrint in
+                    formData = CapturedData(image: image, featurePrint: featurePrint)
+                }
+            }
+            .sheet(item: $formData) { data in
+                ItemFormView(capturedImage: data.image, featurePrintData: data.featurePrint)
             }
         }
     }
 
-    private var emptyState: some View {
-        VStack(spacing: 20) {
-            Spacer()
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 60))
-                .foregroundStyle(.secondary)
-            Text("등록된 물건이 없어요")
+    private var emptyStateView: some View {
+        VStack(spacing: 24) {
+            Image(systemName: "cube.transparent")
+                .font(.system(size: 80))
+                .foregroundStyle(.blue)
+
+            Text("등록된 보물이 없어요")
                 .font(.title2)
-                .fontWeight(.medium)
-            Text("+ 버튼을 눌러 찾을 물건을 등록해 보세요!")
+                .fontWeight(.semibold)
+
+            Text("+ 버튼을 눌러 첫 보물을 등록해보세요!")
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Spacer()
+                .padding(.horizontal)
         }
-        .padding()
     }
 
-    private var itemGrid: some View {
+    private var treasureGridView: some View {
         ScrollView {
-            LazyVGrid(columns: columns, spacing: 16) {
-                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                    itemCard(item)
-                        .transition(.scale.combined(with: .opacity))
-                        .animation(.spring(response: 0.4, dampingFraction: 0.7).delay(Double(index) * 0.05), value: items.count)
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                ForEach(items) { item in
+                    TreasureCard(item: item)
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                deleteItem(item)
+                            } label: {
+                                Label("삭제", systemImage: "trash")
+                            }
+                        }
                 }
             }
             .padding()
         }
     }
+    
+    private func deleteItem(_ item: TreasureItem) {
+        modelContext.delete(item)
+        try? modelContext.save()
+    }
+}
 
-    private func itemCard(_ item: TargetItem) -> some View {
+struct TreasureCard: View {
+    let item: TreasureItem
+
+    var body: some View {
         VStack(spacing: 8) {
-            if let uiImage = UIImage(data: item.thumbnailData) {
+            // 사진 미리보기
+            if let photoData = item.photoData,
+               let uiImage = UIImage(data: photoData) {
                 Image(uiImage: uiImage)
                     .resizable()
                     .scaledToFill()
-                    .frame(height: 120)
-                    .clipped()
+                    .frame(height: 150)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             } else {
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(.secondary.opacity(0.2))
-                    .frame(height: 120)
+                    .fill(Color.gray.opacity(0.2))
+                    .frame(height: 150)
                     .overlay {
                         Image(systemName: "photo")
-                            .font(.largeTitle)
+                            .font(.system(size: 40))
                             .foregroundStyle(.secondary)
                     }
             }
@@ -121,116 +116,21 @@ struct HomeView: View {
                     .lineLimit(1)
 
                 HStack(spacing: 2) {
-                    ForEach(1...5, id: \.self) { star in
+                    ForEach(1...3, id: \.self) { star in
                         Image(systemName: star <= item.difficulty ? "star.fill" : "star")
-                            .font(.caption2)
+                            .font(.caption)
                             .foregroundStyle(.yellow)
                     }
                 }
-
-                Text("\(item.photos.count)장")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(8)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-        .contextMenu {
-            Button {
-                HapticHelper.buttonTap()
-                viewModel.startGame(with: item)
-            } label: {
-                Label("게임 시작", systemImage: "play.fill")
-            }
-
-            Button(role: .destructive) {
-                viewModel.deleteItem(item, context: modelContext)
-            } label: {
-                Label("삭제", systemImage: "trash")
-            }
-        }
-        .onTapGesture {
-            HapticHelper.buttonTap()
-            viewModel.startGame(with: item)
-        }
-    }
-
-    private var gameStartButton: some View {
-        Button {
-            HapticHelper.buttonTap()
-            viewModel.startRandomGame(items: items)
-        } label: {
-            Label("랜덤 보물찾기 시작!", systemImage: "sparkles")
-                .font(.title3)
-                .fontWeight(.bold)
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(.blue, in: RoundedRectangle(cornerRadius: 16))
-                .foregroundStyle(.white)
-                .shadow(color: .blue.opacity(0.3), radius: 8, y: 4)
-        }
-        .padding()
-        .buttonStyle(PulseButtonStyle())
-    }
-
-    private var trainingOverlay: some View {
-        VStack(spacing: 16) {
-            Spacer()
-
-            VStack(spacing: 12) {
-                if viewModel.showTrainingComplete {
-                    // Success state
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 48))
-                        .foregroundStyle(.green)
-                        .symbolEffect(.bounce, value: viewModel.showTrainingComplete)
-
-                    Text(viewModel.trainingMessage)
-                        .font(.headline)
-                        .multilineTextAlignment(.center)
-                } else {
-                    // Training in progress
-                    ProgressView()
-                        .scaleEffect(1.2)
-                        .tint(.blue)
-
-                    Text(viewModel.trainingMessage)
-                        .font(.subheadline)
-
-                    if viewModel.trainingProgress > 0 {
-                        ProgressView(value: viewModel.trainingProgress)
-                            .frame(width: 200)
-                            .tint(.blue)
-
-                        Text("\(Int(viewModel.trainingProgress * 100))%")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .padding(24)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
-            .shadow(color: .black.opacity(0.1), radius: 10)
-            .padding(.horizontal, 40)
-
-            Spacer()
-        }
-        .transition(.scale.combined(with: .opacity))
-        .animation(.spring(response: 0.3), value: viewModel.showTrainingComplete)
-    }
-}
-
-// MARK: - Button Styles
-
-struct PulseButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
-            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
     }
 }
 
 #Preview {
     HomeView()
-        .modelContainer(for: TargetItem.self, inMemory: true)
+        .modelContainer(for: TreasureItem.self, inMemory: true)
 }

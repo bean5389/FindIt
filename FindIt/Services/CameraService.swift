@@ -1,245 +1,266 @@
-@preconcurrency import AVFoundation
+import AVFoundation
 import UIKit
-import ARKit
 
+/// AVFoundation 기반 카메라 서비스
 @Observable
-final class CameraService: NSObject, @unchecked Sendable {
-    // Standard camera properties
-    let session = AVCaptureSession()
-    private let sessionQueue = DispatchQueue(label: "me.bean5389.FindIt.camera")
-    private let videoOutput = AVCaptureVideoDataOutput()
-    private let photoOutput = AVCapturePhotoOutput()
-
-    // ARKit properties for LiDAR
-    let arSession = ARSession()
-    private let arConfiguration: ARWorldTrackingConfiguration = {
-        let config = ARWorldTrackingConfiguration()
-        if ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh) {
-            config.sceneReconstruction = .mesh
-        }
-        config.frameSemantics = [.sceneDepth, .smoothedSceneDepth]
-        return config
-    }()
-
-    private(set) var isRunning = false
-    private(set) var permissionGranted = false
-    private(set) var isLiDARAvailable = ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh)
-
-    /// Callback for each throttled video frame. Called on MainActor.
-    var onFrame: ((CGImage) -> Void)?
-
-    private var photoContinuation: CheckedContinuation<UIImage?, Never>?
-
-    // Throttle: process at most ~12 fps (improved from 8fps for better recognition)
-    private let frameInterval: TimeInterval = 1.0 / 12.0
-    @ObservationIgnored
-    private nonisolated(unsafe) var lastFrameTime: TimeInterval = 0
-
+class CameraService: NSObject {
+    // MARK: - Properties
+    var captureSession: AVCaptureSession?
+    var videoOutput: AVCaptureVideoDataOutput?
+    var previewLayer: AVCaptureVideoPreviewLayer?
+    
+    private let sessionQueue = DispatchQueue(label: "com.findit.camera.session")
+    private var isSessionConfigured = false
+    
+    // MARK: - Lifecycle
     override init() {
         super.init()
-        arSession.delegate = self
     }
-
-    func requestPermission() async -> Bool {
-        let status = AVCaptureDevice.authorizationStatus(for: .video)
-        switch status {
-        case .authorized:
-            permissionGranted = true
-        case .notDetermined:
-            permissionGranted = await AVCaptureDevice.requestAccess(for: .video)
-        default:
-            permissionGranted = false
+    
+    // MARK: - Session Setup
+    func setupSession() async throws {
+        guard !isSessionConfigured else { return }
+        
+        let authorized = await checkAuthorization()
+        guard authorized else {
+            throw CameraError.notAuthorized
         }
-        return permissionGranted
-    }
-
-    func configure() {
-        if isLiDARAvailable {
-            // ARKit doesn't need pre-configuration like AVCaptureSession for basic frame access
-        } else {
+        
+        try await withCheckedThrowingContinuation { continuation in
             sessionQueue.async { [weak self] in
-                self?.configureSession()
-            }
-        }
-    }
-
-    func start() {
-        if isLiDARAvailable {
-            arSession.run(arConfiguration, options: [.resetTracking, .removeExistingAnchors])
-            DispatchQueue.main.async {
-                self.isRunning = true
-            }
-        } else {
-            sessionQueue.async { [weak self] in
-                guard let self, !self.session.isRunning else { return }
-                self.session.startRunning()
-                DispatchQueue.main.async {
-                    self.isRunning = true
+                do {
+                    try self?.configureSession()
+                    self?.isSessionConfigured = true
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
                 }
             }
         }
     }
-
-    func stop() {
-        if isLiDARAvailable {
-            arSession.pause()
-            DispatchQueue.main.async {
-                self.isRunning = false
-            }
-        } else {
-            sessionQueue.async { [weak self] in
-                guard let self, self.session.isRunning else { return }
-                self.session.stopRunning()
-                DispatchQueue.main.async {
-                    self.isRunning = false
-                }
-            }
-        }
-    }
-
-    func capturePhoto() async -> UIImage? {
-        if isLiDARAvailable {
-            // Get current frame from ARSession
-            guard let frame = arSession.currentFrame else { return nil }
-            let ciImage = CIImage(cvPixelBuffer: frame.capturedImage)
-            let context = CIContext()
-            guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return nil }
-            return UIImage(cgImage: cgImage, scale: 1.0, orientation: .right)
-        } else {
-            return await withCheckedContinuation { continuation in
-                self.photoContinuation = continuation
-                let settings = AVCapturePhotoSettings()
-                let output = self.photoOutput
-                sessionQueue.async {
-                    output.capturePhoto(with: settings, delegate: self)
-                }
-            }
-        }
-    }
-
-    /// Captures current frame with depth map (LiDAR only)
-    func capturePhotoWithDepth() async -> (image: UIImage, depthMap: CVPixelBuffer)? {
-        guard isLiDARAvailable, let frame = arSession.currentFrame else { return nil }
-        guard let depthMap = frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap else { return nil }
-
-        let ciImage = CIImage(cvPixelBuffer: frame.capturedImage)
-        let context = CIContext()
-        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return nil }
-        let image = UIImage(cgImage: cgImage, scale: 1.0, orientation: .right)
-
-        return (image, depthMap)
-    }
-
-    /// Performs a hit test or uses depth data to find the depth at a normalized point.
-    func getDepth(at point: CGPoint) -> Float? {
-        guard isLiDARAvailable, let frame = arSession.currentFrame else { return nil }
-        guard let depthMap = frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap else { return nil }
-
-        // Map point to depth map coordinates
-        let width = CVPixelBufferGetWidth(depthMap)
-        let height = CVPixelBufferGetHeight(depthMap)
-        let x = Int(point.x * CGFloat(width))
-        let y = Int(point.y * CGFloat(height))
-
-        guard x >= 0 && x < width && y >= 0 && y < height else { return nil }
-
-        CVPixelBufferLockBaseAddress(depthMap, .readOnly)
-        defer { CVPixelBufferUnlockBaseAddress(depthMap, .readOnly) }
-
-        let baseAddress = CVPixelBufferGetBaseAddress(depthMap)
-        let floatBuffer = baseAddress?.assumingMemoryBound(to: Float32.self)
-        let index = y * width + x
-        return floatBuffer?[index]
-    }
-
-    private func configureSession() {
+    
+    private func configureSession() throws {
+        let session = AVCaptureSession()
         session.beginConfiguration()
-        session.sessionPreset = .high
-
-        guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
-              let input = try? AVCaptureDeviceInput(device: camera) else {
+        
+        // 해상도 설정 (input 추가 전에 설정)
+        if session.canSetSessionPreset(.high) {
+            session.sessionPreset = .high
+        }
+        
+        // Input: 후면 카메라
+        guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
             session.commitConfiguration()
-            return
+            throw CameraError.deviceNotFound
         }
-
-        if session.canAddInput(input) {
-            session.addInput(input)
+        
+        let videoInput = try AVCaptureDeviceInput(device: camera)
+        guard session.canAddInput(videoInput) else {
+            session.commitConfiguration()
+            throw CameraError.cannotAddInput
         }
-
-        videoOutput.setSampleBufferDelegate(self, queue: sessionQueue)
-        videoOutput.alwaysDiscardsLateVideoFrames = true
-        if session.canAddOutput(videoOutput) {
-            session.addOutput(videoOutput)
+        session.addInput(videoInput)
+        
+        // Output: 비디오 프레임
+        let output = AVCaptureVideoDataOutput()
+        output.alwaysDiscardsLateVideoFrames = true
+        output.setSampleBufferDelegate(self, queue: sessionQueue)
+        
+        guard session.canAddOutput(output) else {
+            session.commitConfiguration()
+            throw CameraError.cannotAddOutput
         }
-
-        if session.canAddOutput(photoOutput) {
-            session.addOutput(photoOutput)
+        session.addOutput(output)
+        
+        // 비디오 방향 설정 (iOS 17+)
+        if let connection = output.connection(with: .video) {
+            if connection.isVideoRotationAngleSupported(90) {
+                connection.videoRotationAngle = 90  // Portrait
+            }
         }
-
+        
         session.commitConfiguration()
+        
+        self.captureSession = session
+        self.videoOutput = output
+    }
+    
+    // MARK: - Session Control
+    func startSession() {
+        sessionQueue.async { [weak self] in
+            self?.captureSession?.startRunning()
+        }
+    }
+    
+    func stopSession() {
+        sessionQueue.async { [weak self] in
+            guard let self = self else { return }
+            guard let session = self.captureSession, session.isRunning else { return }
+            
+            // 진행 중인 캡처 취소
+            if let continuation = self.photoCaptureContinuation, !self.photoCaptureContinuationResumed {
+                self.photoCaptureContinuationResumed = true
+                continuation.resume(throwing: CameraError.sessionNotRunning)
+            }
+            self.photoCaptureContinuation = nil
+            
+            // 세션 정지
+            session.stopRunning()
+            
+            // 세션이 완전히 멈출 때까지 잠시 대기
+            Thread.sleep(forTimeInterval: 0.1)
+            
+            // 입력/출력 제거
+            session.beginConfiguration()
+            
+            for input in session.inputs {
+                session.removeInput(input)
+            }
+            
+            for output in session.outputs {
+                session.removeOutput(output)
+            }
+            
+            session.commitConfiguration()
+            
+            self.captureSession = nil
+            self.videoOutput = nil
+        }
+    }
+    
+    // MARK: - Photo Capture
+    func capturePhoto() async throws -> UIImage {
+        guard let captureSession = captureSession,
+              captureSession.isRunning else {
+            throw CameraError.sessionNotRunning
+        }
+        
+        // 현재 프레임에서 사진 캡처
+        return try await withCheckedThrowingContinuation { continuation in
+            var resumed = false
+            
+            sessionQueue.async { [weak self] in
+                guard let self = self else {
+                    if !resumed {
+                        resumed = true
+                        continuation.resume(throwing: CameraError.captureFailure)
+                    }
+                    return
+                }
+                
+                // 다음 프레임을 기다려서 반환
+                self.photoCaptureContinuation = continuation
+                self.photoCaptureContinuationResumed = resumed
+            }
+        }
+    }
+    
+    private var photoCaptureContinuation: CheckedContinuation<UIImage, Error>?
+    private var photoCaptureContinuationResumed = false
+    
+    // MARK: - Authorization
+    private func checkAuthorization() async -> Bool {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            return true
+        case .notDetermined:
+            return await AVCaptureDevice.requestAccess(for: .video)
+        default:
+            return false
+        }
+    }
+    
+    // MARK: - Preview Layer
+    func makePreviewLayer() -> AVCaptureVideoPreviewLayer? {
+        guard let session = captureSession else { return nil }
+        
+        let layer = AVCaptureVideoPreviewLayer(session: session)
+        layer.videoGravity = .resizeAspectFill
+        self.previewLayer = layer
+        return layer
     }
 }
 
+// MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
 extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
-    nonisolated func captureOutput(
+    func captureOutput(
         _ output: AVCaptureOutput,
         didOutput sampleBuffer: CMSampleBuffer,
         from connection: AVCaptureConnection
     ) {
-        let now = CACurrentMediaTime()
-        guard now - lastFrameTime >= frameInterval else { return }
-        lastFrameTime = now
-
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-
-        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        let context = CIContext()
-        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return }
-
-        DispatchQueue.main.async { [weak self] in
-            self?.onFrame?(cgImage)
+        // Photo capture를 위한 프레임 처리
+        if let continuation = photoCaptureContinuation, !photoCaptureContinuationResumed {
+            photoCaptureContinuationResumed = true
+            
+            guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+                continuation.resume(throwing: CameraError.captureFailure)
+                photoCaptureContinuation = nil
+                return
+            }
+            
+            let ciImage = CIImage(cvPixelBuffer: imageBuffer)
+            let context = CIContext()
+            
+            guard let fullCGImage = context.createCGImage(ciImage, from: ciImage.extent) else {
+                continuation.resume(throwing: CameraError.captureFailure)
+                photoCaptureContinuation = nil
+                return
+            }
+            
+            let imageWidth = CGFloat(fullCGImage.width)
+            let imageHeight = CGFloat(fullCGImage.height)
+            let targetAspect: CGFloat = 9.0 / 16.0
+            let imageAspect = imageWidth / imageHeight
+            
+            var cropRect: CGRect
+            if abs(imageAspect - targetAspect) < 0.01 {
+                cropRect = CGRect(x: 0, y: 0, width: imageWidth, height: imageHeight)
+            } else if imageAspect > targetAspect {
+                let targetWidth = imageHeight * targetAspect
+                let offsetX = (imageWidth - targetWidth) / 2
+                cropRect = CGRect(x: offsetX, y: 0, width: targetWidth, height: imageHeight)
+            } else {
+                let targetHeight = imageWidth / targetAspect
+                let offsetY = (imageHeight - targetHeight) / 2
+                cropRect = CGRect(x: 0, y: offsetY, width: imageWidth, height: targetHeight)
+            }
+            
+            guard let croppedCGImage = fullCGImage.cropping(to: cropRect) else {
+                continuation.resume(throwing: CameraError.captureFailure)
+                photoCaptureContinuation = nil
+                return
+            }
+            
+            let image = UIImage(cgImage: croppedCGImage, scale: 1.0, orientation: .up)
+            continuation.resume(returning: image)
+            photoCaptureContinuation = nil
         }
     }
 }
 
-extension CameraService: AVCapturePhotoCaptureDelegate {
-    nonisolated func photoOutput(
-        _ output: AVCapturePhotoOutput,
-        didFinishProcessingPhoto photo: AVCapturePhoto,
-        error: Error?
-    ) {
-        let image: UIImage?
-        if let data = photo.fileDataRepresentation() {
-            image = UIImage(data: data)
-        } else {
-            image = nil
-        }
-
-        DispatchQueue.main.async { [weak self] in
-            let continuation = self?.photoContinuation
-            self?.photoContinuation = nil
-            continuation?.resume(returning: image)
-        }
-    }
-}
-
-extension CameraService: ARSessionDelegate {
-    nonisolated func session(_ session: ARSession, didUpdate frame: ARFrame) {
-        let now = CACurrentMediaTime()
-        guard now - lastFrameTime >= frameInterval else { return }
-        lastFrameTime = now
-
-        let pixelBuffer = frame.capturedImage
-        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        let context = CIContext()
-
-        // ARKit capturedImage is often rotated.
-        let rotated = ciImage.oriented(.right)
-
-        guard let cgImage = context.createCGImage(rotated, from: rotated.extent) else { return }
-
-        DispatchQueue.main.async { [weak self] in
-            self?.onFrame?(cgImage)
+// MARK: - Errors
+enum CameraError: LocalizedError {
+    case notAuthorized
+    case deviceNotFound
+    case cannotAddInput
+    case cannotAddOutput
+    case sessionNotRunning
+    case captureFailure
+    
+    var errorDescription: String? {
+        switch self {
+        case .notAuthorized:
+            return "카메라 권한이 필요합니다."
+        case .deviceNotFound:
+            return "카메라를 찾을 수 없습니다."
+        case .cannotAddInput:
+            return "카메라 입력을 추가할 수 없습니다."
+        case .cannotAddOutput:
+            return "카메라 출력을 추가할 수 없습니다."
+        case .sessionNotRunning:
+            return "카메라 세션이 실행 중이 아닙니다."
+        case .captureFailure:
+            return "사진 캡처에 실패했습니다."
         }
     }
 }

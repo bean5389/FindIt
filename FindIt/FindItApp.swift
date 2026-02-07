@@ -5,8 +5,7 @@ import SwiftData
 struct FindItApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            TargetItem.self,
-            TargetPhoto.self,
+            TreasureItem.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
