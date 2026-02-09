@@ -13,12 +13,14 @@
 - 이름, 힌트, 난이도 설정
 
 ### 탐색 게임 (Play)
-- 미션 카드로 찾을 물건 제시
+- 미션 카드로 찾을 물건 제시 (보물 사진 + 이름 + 힌트 + 난이도)
 - 실시간 카메라 유사도 피드백 (Hot & Cold)
-  - **Cold** (< 0.25): 반응 없음
-  - **Warm** (0.25 ~ 0.5): 화면 테두리 색상 변경
-  - **Hot** (0.5 ~ 0.65): 강한 시각적 강조
-  - **Match** (>= 0.65): 1초 유지 시 성공 판정 (개선된 임계값)
+  - **Cold** (< 0.35): 상태 텍스트만 반투명 표시
+  - **Warm** (0.35 ~ 0.45): 노란 바운딩 박스 + 가벼운 진동
+  - **Hot** (0.45 ~ 0.6): 주황 바운딩 박스 + 중간 진동 + 맥동 효과
+  - **Match** (≥ 0.6): 초록 바운딩 박스 + 강한 진동 + 맥동 효과, 1초 유지 시 성공!
+- 성공 시 순차 등장 애니메이션 + 2단계 햅틱 피드백
+- 힌트 버튼으로 보물 사진 오버레이 확인 가능
 
 ## 기술 스택
 
@@ -59,7 +61,8 @@ FindIt/
 ├── Services/
 │   ├── CameraService.swift       # AVCaptureSession 관리
 │   ├── SegmentationService.swift # Vision 기반 사물 감지 (VNGenerateForegroundInstanceMaskRequest)
-│   └── VisionService.swift       # Feature Print 추출 및 유사도 계산
+│   ├── VisionService.swift       # Feature Print 추출 및 유사도 계산
+│   └── HapticManager.swift       # 햅틱 피드백 관리 (0.3s 디바운싱)
 └── Views/
     ├── HomeView.swift            # 보물 도감 Grid
     ├── Capture/
@@ -76,18 +79,85 @@ FindIt/
 | Step 1: PoC | Feature Print 유사도 검증 | ✅ Done |
 | Step 2: 카메라 | 실시간 프레임 처리 | ✅ Done |
 | Step 3: 데이터 & UI | 전체 화면 구현 | ✅ Done |
-| Step 4: LiDAR & 객체 선택 | ARKit LiDAR 프리뷰 + 탭 기반 사물 세그먼트 | ✅ Done |
-| Step 5: ML 파이프라인 | k-NN On-device 학습 + UI 피드백 | ✅ Done |
-| Step 6: 폴리싱 | 애니메이션, 햅틱, 이펙트, 접근성 | ✅ Done |
+| Step 4: 사물 감지 & 선택 | Vision 기반 실시간 사물 감지 + 스마트 선택 | ✅ Done |
+| Step 5: 게임 화면 & 매칭 | 실시간 Feature Print 매칭 + Hot & Cold 피드백 | ✅ Done |
+| Step 6: 폴리싱 | 햅틱 피드백, 애니메이션, 시각 효과 | ✅ Done |
 
-### v0.5 보물찾기 게임 화면 (2026-02-08)
+### v0.6 GameView UI/UX 폴리싱 (2026-02-09)
 
-**✅ 완료**
-- GameView 구현: 카메라 프리뷰 + 실시간 Feature Print 매칭
-- Hot & Cold 피드백: 유사도에 따라 테두리 색상 변경 (Cold/Warm/Hot/Match)
-- Match 1초 유지 시 성공 판정 → 성공 화면 표시
-- 미션 카드 UI: 보물 사진 + 이름 + 힌트 + 난이도 표시
-- HomeView 연동: 보물 카드 탭 → GameView fullScreenCover 표시
+**✅ 햅틱 피드백 구현**
+- **HapticManager 서비스 신규 추가**
+  - Singleton 패턴으로 햅틱 피드백 중앙 관리
+  - matchLevel 변경 시 차등 햅틱 (warm: light, hot: medium, match: heavy)
+  - 성공 시 2단계 햅틱 (notification + heavy, 0.1초 간격)
+  - 0.3초 디바운싱으로 과도한 진동 방지
+- **힌트 버튼 라이트 햅틱** 추가
+
+**✅ 성공 화면 애니메이션**
+- **전환 애니메이션**: 스케일(0.8→1.0) + 투명도 (0.6초 spring)
+- **순차 등장 효과** (0.2초 간격):
+  1. 이미지 스케일 업
+  2. 이모지 페이드 인
+  3. "찾았다!" 텍스트
+  4. 보물 이름
+  5. 홈으로 버튼
+- **이미지 펄스**: 1초 주기로 1.0 ↔ 1.05 맥동
+
+**✅ 바운딩 박스 시각 피드백 개선**
+- **부드러운 색상 전환**: 0.3초 easeInOut 애니메이션
+- **맥동 후광 효과** (hot/match 레벨):
+  - 외곽 후광 링 (스케일 1.0 → 1.2)
+  - 투명도 페이드 아웃 (0.8 → 0.0)
+  - 1초 주기 반복
+
+**✅ 상태 텍스트 개선**
+- **cold 상태 가시성**: 반투명(60%)으로 항상 표시
+- **matchLevel 펄스**: 레벨 변경 시 1.0 → 1.15 → 1.0 애니메이션
+
+**✅ 힌트 UX 폴리싱**
+- **버튼 스케일**: 활성 시 1.1배 확대
+- **오버레이 전환**: 스케일 0.8 ↔ 1.0 spring 애니메이션
+
+**✅ Constants 애니메이션 상수 추가**
+- `Game.successTransitionDuration/Damping`
+- `Game.statusPulseResponse`
+- `Game.boxColorTransitionDuration/boxPulseDuration`
+- `Game.hintScaleResponse`
+
+**🎯 개선 효과**
+- 촉각 피드백으로 게임 몰입도 향상
+- 부드러운 애니메이션으로 시각적 연속성 확보
+- 성공 순간의 만족감 극대화
+- 앱 작동 상태 명확히 전달
+
+### v0.5 보물찾기 게임 화면 (2026-02-09)
+
+**✅ GameView 기본 구현**
+- 전체 화면 카메라 프리뷰
+- 하단 미션 카드 (보물 사진 + 이름 + 힌트 + 난이도)
+- 상단 바 (닫기, 타이틀, 힌트 버튼)
+- 성공 화면 (보물 사진 + "찾았다!" + 홈으로 버튼)
+
+**✅ 실시간 매칭 로직**
+- 0.5초 간격 Feature Print 매칭
+- 세그먼테이션 기반 개별 사물 크롭 비교
+- 바운딩 박스 실시간 표시
+- 유사도 임계값 최적화 (match: 0.6, hot: 0.45, warm: 0.35)
+
+**✅ Hot & Cold 피드백**
+- 4단계 피드백 (cold/warm/hot/match)
+- 바운딩 박스 색상 변경 (투명/노랑/주황/초록)
+- 상태 텍스트 + 매칭률 실시간 표시
+- Match 레벨 1초 유지 시 성공 판정
+
+**✅ HomeView 연동**
+- 보물 카드 탭 → GameView fullScreenCover
+- 게임 종료 시 홈으로 복귀
+
+**🎯 개선 효과**
+- 개별 사물 크롭으로 정확도 향상
+- 0.5초 주기로 빠른 반응성
+- 색상과 텍스트로 직관적 피드백
 
 ## 코드 품질 개선 (2026-02-08)
 

@@ -25,10 +25,10 @@
 - 카메라로 집안을 비추면서 보물 찾기
 - Vision Feature Print 실시간 매칭
 - Hot & Cold 피드백 (유사도 기반)
-  - **Cold** (< 0.3): 반응 없음
-  - **Warm** (0.3 ~ 0.5): 노란 테두리
-  - **Hot** (0.5 ~ 0.7): 주황 테두리 + 진동
-  - **Match** (>= 0.7): 초록 테두리 + 1초 유지 시 성공!
+  - **Cold** (< 0.35): 반응 없음 (텍스트만 반투명 표시)
+  - **Warm** (0.35 ~ 0.45): 노란 테두리 + 가벼운 진동
+  - **Hot** (0.45 ~ 0.6): 주황 테두리 + 중간 진동 + 맥동 효과
+  - **Match** (≥ 0.6): 초록 테두리 + 강한 진동 + 맥동 효과, 1초 유지 시 성공!
 
 ## 기술 스택
 
@@ -88,7 +88,8 @@ FindIt/
 ├── Services/
 │   ├── CameraService.swift          # AVFoundation 카메라
 │   ├── VisionService.swift          # Feature Print 추출 & 매칭
-│   └── SegmentationService.swift    # 사물 감지 & 윤곽선 추출
+│   ├── SegmentationService.swift    # 사물 감지 & 윤곽선 추출
+│   └── HapticManager.swift          # 햅틱 피드백 관리
 └── Views/
     ├── HomeView.swift               # 보물 도감 Grid
     └── Capture/
@@ -104,9 +105,83 @@ FindIt/
 | ✅ Step 1 | 실시간 사물 감지 & 선택 | 완료 (2026-02-07) |
 | ✅ Step 2 | 보물 등록 플로우 완성 | 완료 (2026-02-07) |
 | ✅ Step 2.5 | 코드 리팩토링 & 회전 지원 | 완료 (2026-02-08) |
-| 🔨 Step 3 | 보물찾기 게임 화면 | 진행중 |
-| ⏳ Step 4 | 실시간 매칭 & 피드백 | 계획중 |
-| ⏳ Step 5 | 폴리싱 (애니메이션, 햅틱) | 계획중 |
+| ✅ Step 3 | 보물찾기 게임 화면 | 완료 (2026-02-09) |
+| ✅ Step 4 | 실시간 매칭 & 피드백 | 완료 (2026-02-09) |
+| ✅ Step 5 | 폴리싱 (애니메이션, 햅틱) | 완료 (2026-02-09) |
+
+### v0.6 GameView UI/UX 대폭 개선 (2026-02-09)
+
+**✅ 완료**
+- **HapticManager 서비스 신규 추가**
+  - Singleton 패턴으로 햅틱 피드백 중앙 관리
+  - 0.3초 디바운싱으로 과도한 진동 방지
+  - matchLevel별 차등 햅틱 (light/medium/heavy)
+  - 성공 시 2단계 햅틱 (notification + heavy, 0.1초 간격)
+
+- **성공 화면 애니메이션**
+  - 전체 화면 스케일 + 투명도 전환 (0.6초 spring)
+  - 요소별 순차 등장 (0.2초 간격)
+    - 이미지 → 이모지 → "찾았다!" → 보물 이름 → 홈으로 버튼
+  - 이미지 펄스 효과 (1.0 ↔ 1.05, 1초 주기)
+
+- **바운딩 박스 시각 피드백 개선**
+  - 색상 전환 부드러운 애니메이션 (0.3초 easeInOut)
+  - hot/match 레벨에서 맥동 후광 효과
+  - 실시간 맥동 애니메이션 (1.0 → 1.2 스케일)
+
+- **상태 텍스트 개선**
+  - cold 상태에서도 텍스트 표시 (반투명 60%)
+  - matchLevel 변경 시 펄스 애니메이션 (1.0 → 1.15 → 1.0)
+
+- **힌트 버튼 폴리싱**
+  - 탭 시 스케일 애니메이션 (1.1배)
+  - 라이트 햅틱 피드백
+  - 힌트 오버레이 스케일 전환 (0.8 ↔ 1.0)
+
+- **Constants 애니메이션 상수 추가**
+  - Game.successTransitionDuration/Damping
+  - Game.statusPulseResponse
+  - Game.boxColorTransitionDuration/boxPulseDuration
+  - Game.hintScaleResponse
+
+**🎯 주요 효과**
+- **몰입도 향상**: 햅틱 피드백으로 촉각적 몰입감 제공
+- **시각적 연속성**: 부드러운 애니메이션으로 자연스러운 전환
+- **성공 만족감**: 순차 등장 애니메이션으로 성취감 극대화
+- **피드백 명확성**: cold 상태에서도 앱 작동 여부 명확히 표시
+
+### v0.5 보물찾기 게임 화면 (2026-02-09)
+
+**✅ 완료**
+- **GameView 기본 구조**
+  - 전체 화면 카메라 프리뷰
+  - 하단 미션 카드 (보물 사진 + 이름 + 힌트 + 난이도)
+  - 상단 바 (닫기, 타이틀, 힌트 버튼)
+
+- **실시간 매칭 로직**
+  - 0.5초 간격 Feature Print 매칭
+  - 세그먼테이션 기반 개별 사물 크롭 비교
+  - 바운딩 박스 실시간 표시
+  - 유사도 임계값 조정 (match: 0.6, hot: 0.45, warm: 0.35)
+
+- **Hot & Cold 피드백**
+  - 유사도에 따른 4단계 피드백 (cold/warm/hot/match)
+  - 바운딩 박스 색상 변경 (투명/노랑/주황/초록)
+  - 상태 텍스트 및 매칭률 표시
+
+- **성공 판정**
+  - match 레벨 1초 유지 시 성공
+  - 성공 화면 표시 (보물 사진 + "찾았다!" + 홈으로 버튼)
+
+- **HomeView 연동**
+  - 보물 카드 탭 → GameView fullScreenCover 표시
+  - 게임 종료 시 홈으로 복귀
+
+**🎯 주요 개선**
+- **정확도**: 개별 사물 크롭으로 배경 간섭 최소화
+- **반응성**: 0.5초 주기로 빠른 피드백
+- **직관성**: 색상과 텍스트로 명확한 피드백
+- **게임성**: 1초 유지 조건으로 적절한 난이도
 
 ### v0.4 코드 리팩토링 & 방향 최적화 (2026-02-08)
 
@@ -226,8 +301,15 @@ final class TreasureItem {
 - `VNGenerateImageFeaturePrintRequest` 사용
 - Feature Print 추출 (인식용 벡터)
 - Feature Print 비교 (computeDistance)
-- **유사도 임계값**: Constants.Vision.SimilarityThreshold (0.3, 0.5, 0.7)
+- **유사도 임계값**: Constants.Vision.SimilarityThreshold (0.35, 0.45, 0.6)
 - MatchLevel 변환: Cold, Warm, Hot, Match
+
+#### HapticManager (FindIt/Services/HapticManager.swift)
+- Singleton 패턴 햅틱 피드백 관리
+- UIImpactFeedbackGenerator (light/medium/heavy)
+- UINotificationFeedbackGenerator (success)
+- 0.3초 디바운싱으로 과도한 진동 방지
+- matchLevel별 차등 햅틱, 성공 시 2단계 햅틱
 
 #### CapturePhotoView (FindIt/Views/Capture/CapturePhotoView.swift)
 - 실시간 감지 (Constants.Capture.detectionInterval = 0.5초)
@@ -277,12 +359,12 @@ final class TreasureItem {
 ```
 
 #### 피드백 레벨
-| MatchLevel | 유사도 | 테두리 색 |
-|-----------|-------|----------|
-| Cold | < 0.3 | 투명 |
-| Warm | 0.3~0.5 | 노란색 |
-| Hot | 0.5~0.7 | 주황색 |
-| Match | ≥ 0.7 | 초록색 |
+| MatchLevel | 유사도 | 테두리 색 | 햅틱 | 효과 |
+|-----------|-------|----------|------|------|
+| Cold | < 0.35 | - | - | 상태 텍스트만 (반투명) |
+| Warm | 0.35~0.45 | 노란색 | Light | - |
+| Hot | 0.45~0.6 | 주황색 | Medium | 맥동 후광 |
+| Match | ≥ 0.6 | 초록색 | Heavy | 맥동 후광 + 1초 유지 시 성공 |
 
 ### ⏳ Phase 4: 실시간 매칭
 1. 실시간 Feature Print 매칭
