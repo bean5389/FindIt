@@ -76,7 +76,7 @@ class VisionService {
         
         // 유사도로 변환 (0.0 ~ 1.0, 높을수록 유사)
         // distance가 0에 가까울수록 similarity는 1에 가까움
-        let similarity = max(0, 1 - (distance / 2.0))
+        let similarity = max(0, 1 - (distance / Constants.Vision.distanceNormalizationFactor))
         
         return similarity
     }
@@ -97,11 +97,11 @@ class VisionService {
     /// 유사도를 게임 피드백 레벨로 변환
     func matchLevel(for similarity: Float) -> MatchLevel {
         switch similarity {
-        case 0.7...:
+        case Constants.Vision.SimilarityThreshold.match...:
             return .match       // 매치!
-        case 0.5..<0.7:
+        case Constants.Vision.SimilarityThreshold.hot..<Constants.Vision.SimilarityThreshold.match:
             return .hot         // 뜨거워요!
-        case 0.3..<0.5:
+        case Constants.Vision.SimilarityThreshold.warm..<Constants.Vision.SimilarityThreshold.hot:
             return .warm        // 따뜻해요
         default:
             return .cold        // 차가워요

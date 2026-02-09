@@ -158,7 +158,7 @@ struct CapturePhotoView: View {
     }
     
     private func startRealtimeDetection() {
-        detectionTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+        detectionTimer = Timer.scheduledTimer(withTimeInterval: Constants.Capture.detectionInterval, repeats: true) { _ in
             Task {
                 await detectObjectsInCurrentFrame()
             }
@@ -232,8 +232,8 @@ struct CapturePhotoView: View {
         let imageSize = image.size
         let scale = image.scale
         
-        // bounding box를 15% 확장 (각 방향으로 7.5%)
-        let expandRatio: CGFloat = 0.15
+        // bounding box를 확장
+        let expandRatio = Constants.Capture.boundingBoxExpandRatio
         let expandWidth = normalizedRect.width * expandRatio
         let expandHeight = normalizedRect.height * expandRatio
         
@@ -303,7 +303,7 @@ struct ContourOverlay: View {
         let maskSize = object.maskImage.size
         let widthScale = frameSize.width / maskSize.width
         let heightScale = frameSize.height / maskSize.height
-        let scale = max(widthScale, heightScale) * 1.05  // 5% 확대
+        let scale = max(widthScale, heightScale) * Constants.Capture.maskScaleFactor
         
         let scaledWidth = maskSize.width * scale
         let scaledHeight = maskSize.height * scale
@@ -314,11 +314,11 @@ struct ContourOverlay: View {
             .resizable()
             .frame(width: scaledWidth, height: scaledHeight)
             .colorMultiply(isSelected ? .yellow : .green)
-            .opacity(isSelected ? 0.5 : 0.3)
+            .opacity(isSelected ? Constants.Capture.selectedOpacity : Constants.Capture.unselectedOpacity)
             .blendMode(.screen)
             .offset(x: offsetX, y: offsetY)
             .allowsHitTesting(false)
-            .animation(.easeInOut(duration: 0.2), value: isSelected)
+            .animation(.easeInOut(duration: Constants.Capture.selectionAnimationDuration), value: isSelected)
     }
 }
 
@@ -334,7 +334,7 @@ struct TouchableBox: View {
         // ContourOverlay와 동일한 스케일 계산
         let widthScale = frameSize.width / maskSize.width
         let heightScale = frameSize.height / maskSize.height
-        let scale = max(widthScale, heightScale) * 1.05  // 5% 확대
+        let scale = max(widthScale, heightScale) * Constants.Capture.maskScaleFactor
         
         let scaledWidth = maskSize.width * scale
         let scaledHeight = maskSize.height * scale

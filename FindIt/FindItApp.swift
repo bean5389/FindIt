@@ -3,6 +3,8 @@ import SwiftData
 
 @main
 struct FindItApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             TreasureItem.self,
@@ -21,5 +23,15 @@ struct FindItApp: App {
             ContentView()
         }
         .modelContainer(sharedModelContainer)
+    }
+}
+
+// MARK: - AppDelegate (전체 앱 Portrait 고정)
+class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(
+        _ application: UIApplication,
+        supportedInterfaceOrientationsFor window: UIWindow?
+    ) -> UIInterfaceOrientationMask {
+        return .portrait
     }
 }

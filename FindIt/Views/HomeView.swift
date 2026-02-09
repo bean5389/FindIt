@@ -6,6 +6,7 @@ struct HomeView: View {
     @Query(sort: \TreasureItem.createdAt, order: .reverse) private var items: [TreasureItem]
     @State private var showingCapture = false
     @State private var formData: CapturedData?
+    @State private var selectedItemForGame: TreasureItem?
     
     struct CapturedData: Identifiable {
         let id = UUID()
@@ -41,13 +42,16 @@ struct HomeView: View {
             .sheet(item: $formData) { data in
                 ItemFormView(capturedImage: data.image, featurePrintData: data.featurePrint)
             }
+            .fullScreenCover(item: $selectedItemForGame) { item in
+                GameView(treasure: item)
+            }
         }
     }
 
     private var emptyStateView: some View {
         VStack(spacing: 24) {
             Image(systemName: "cube.transparent")
-                .font(.system(size: 80))
+                .font(.system(size: Constants.UI.emptyStateIconSize))
                 .foregroundStyle(.blue)
 
             Text("등록된 보물이 없어요")
@@ -64,9 +68,12 @@ struct HomeView: View {
 
     private var treasureGridView: some View {
         ScrollView {
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Constants.UI.gridSpacing) {
                 ForEach(items) { item in
                     TreasureCard(item: item)
+                        .onTapGesture {
+                            selectedItemForGame = item
+                        }
                         .contextMenu {
                             Button(role: .destructive) {
                                 deleteItem(item)
@@ -76,7 +83,7 @@ struct HomeView: View {
                         }
                 }
             }
-            .padding()
+            .padding(Constants.UI.defaultPadding)
         }
     }
     
@@ -94,18 +101,21 @@ struct TreasureCard: View {
             // 사진 미리보기
             if let photoData = item.photoData,
                let uiImage = UIImage(data: photoData) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(height: 150)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                Color.clear
+                    .frame(height: Constants.UI.cardImageHeight)
+                    .overlay {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .scaledToFill()
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: Constants.UI.imageCornerRadius))
             } else {
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: Constants.UI.imageCornerRadius)
                     .fill(Color.gray.opacity(0.2))
-                    .frame(height: 150)
+                    .frame(height: Constants.UI.cardImageHeight)
                     .overlay {
                         Image(systemName: "photo")
-                            .font(.system(size: 40))
+                            .font(.system(size: Constants.UI.cardIconSize))
                             .foregroundStyle(.secondary)
                     }
             }
@@ -116,7 +126,7 @@ struct TreasureCard: View {
                     .lineLimit(1)
 
                 HStack(spacing: 2) {
-                    ForEach(1...3, id: \.self) { star in
+                    ForEach(Constants.UI.minDifficulty...Constants.UI.maxDifficulty, id: \.self) { star in
                         Image(systemName: star <= item.difficulty ? "star.fill" : "star")
                             .font(.caption)
                             .foregroundStyle(.yellow)
@@ -125,8 +135,8 @@ struct TreasureCard: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(8)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .padding(Constants.UI.cardInnerPadding)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Constants.UI.cardCornerRadius))
     }
 }
 

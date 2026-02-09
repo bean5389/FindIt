@@ -72,10 +72,10 @@ class CameraService: NSObject {
         }
         session.addOutput(output)
         
-        // 비디오 방향 설정 (iOS 17+)
+        // 비디오 방향 설정 (Portrait 고정)
         if let connection = output.connection(with: .video) {
-            if connection.isVideoRotationAngleSupported(90) {
-                connection.videoRotationAngle = 90  // Portrait
+            if connection.isVideoRotationAngleSupported(Constants.Camera.portraitRotationAngle) {
+                connection.videoRotationAngle = Constants.Camera.portraitRotationAngle
             }
         }
         
@@ -108,7 +108,7 @@ class CameraService: NSObject {
             session.stopRunning()
             
             // 세션이 완전히 멈출 때까지 잠시 대기
-            Thread.sleep(forTimeInterval: 0.1)
+            Thread.sleep(forTimeInterval: Constants.Camera.sessionStopDelay)
             
             // 입력/출력 제거
             session.beginConfiguration()
@@ -209,11 +209,11 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
             
             let imageWidth = CGFloat(fullCGImage.width)
             let imageHeight = CGFloat(fullCGImage.height)
-            let targetAspect: CGFloat = 9.0 / 16.0
+            let targetAspect = Constants.Camera.targetAspectRatio
             let imageAspect = imageWidth / imageHeight
             
             var cropRect: CGRect
-            if abs(imageAspect - targetAspect) < 0.01 {
+            if abs(imageAspect - targetAspect) < Constants.Camera.aspectRatioTolerance {
                 cropRect = CGRect(x: 0, y: 0, width: imageWidth, height: imageHeight)
             } else if imageAspect > targetAspect {
                 let targetWidth = imageHeight * targetAspect
@@ -231,7 +231,7 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
                 return
             }
             
-            let image = UIImage(cgImage: croppedCGImage, scale: 1.0, orientation: .up)
+            let image = UIImage(cgImage: croppedCGImage, scale: Constants.Camera.defaultImageScale, orientation: .up)
             continuation.resume(returning: image)
             photoCaptureContinuation = nil
         }

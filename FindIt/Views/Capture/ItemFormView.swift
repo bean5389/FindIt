@@ -11,7 +11,7 @@ struct ItemFormView: View {
     
     @State private var name: String = ""
     @State private var hint: String = ""
-    @State private var difficulty: Int = 2
+    @State private var difficulty: Int = Constants.ItemForm.defaultDifficulty
     @State private var isSaving = false
     @State private var showError = false
     @State private var errorMessage: String?
@@ -39,7 +39,7 @@ struct ItemFormView: View {
                         .textInputAutocapitalization(.never)
                     
                     TextField("힌트 (선택)", text: $hint, axis: .vertical)
-                        .lineLimit(3...6)
+                        .lineLimit(Constants.ItemForm.hintMinLines...Constants.ItemForm.hintMaxLines)
                         .textInputAutocapitalization(.sentences)
                 }
                 
@@ -91,7 +91,7 @@ struct ItemFormView: View {
         Task {
             do {
                 // JPEG로 압축
-                guard let photoData = capturedImage.jpegData(compressionQuality: 0.8) else {
+                guard let photoData = capturedImage.jpegData(compressionQuality: Constants.ItemForm.jpegCompressionQuality) else {
                     throw ItemFormError.imageCompressionFailed
                 }
                 

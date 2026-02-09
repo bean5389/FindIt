@@ -80,21 +80,20 @@
 
 ```
 FindIt/
-├── FindItApp.swift
+├── FindItApp.swift                  # 앱 진입점 (AppDelegate)
 ├── ContentView.swift
+├── Constants.swift                  # 앱 전체 상수 정의 (리팩토링)
 ├── Models/
 │   └── TreasureItem.swift           # 보물 모델 (사진 + Feature Print)
 ├── Services/
 │   ├── CameraService.swift          # AVFoundation 카메라
 │   ├── VisionService.swift          # Feature Print 추출 & 매칭
 │   └── SegmentationService.swift    # 사물 감지 & 윤곽선 추출
-├── Views/
-│   ├── HomeView.swift               # 보물 도감 Grid
-│   ├── CapturePhotoView.swift       # 사물 선택 화면 (프리뷰 + 윤곽선)
-│   ├── ItemFormView.swift           # 정보 입력
-│   └── GameView.swift               # 보물찾기 게임
-└── Utilities/
-    └── HapticHelper.swift           # 햅틱 피드백
+└── Views/
+    ├── HomeView.swift               # 보물 도감 Grid
+    └── Capture/
+        ├── CapturePhotoView.swift   # 사물 선택 화면 (프리뷰 + 윤곽선)
+        └── ItemFormView.swift       # 정보 입력
 ```
 
 ## 개발 진행 상황
@@ -104,9 +103,29 @@ FindIt/
 | ✅ Step 0 | 기본 앱 구조 & SwiftData | 완료 (2026-02-07) |
 | ✅ Step 1 | 실시간 사물 감지 & 선택 | 완료 (2026-02-07) |
 | ✅ Step 2 | 보물 등록 플로우 완성 | 완료 (2026-02-07) |
-| ⏳ Step 3 | 보물찾기 게임 화면 | 계획중 |
+| ✅ Step 2.5 | 코드 리팩토링 & 회전 지원 | 완료 (2026-02-08) |
+| 🔨 Step 3 | 보물찾기 게임 화면 | 진행중 |
 | ⏳ Step 4 | 실시간 매칭 & 피드백 | 계획중 |
 | ⏳ Step 5 | 폴리싱 (애니메이션, 햅틱) | 계획중 |
+
+### v0.4 코드 리팩토링 & 방향 최적화 (2026-02-08)
+
+**✅ 완료**
+- **Constants.swift 생성**: 모든 매직 넘버를 상수로 추출
+  - Camera, Vision, Capture, ItemForm, UI 카테고리
+  - 25개 이상의 매직 넘버 제거
+- **화면 방향 최적화**:
+  - AppDelegate로 전체 앱 Portrait 고정
+  - 카메라 촬영 및 입력 폼에 최적화
+  - 일관된 사용자 경험 제공
+- README 및 Spec 문서 업데이트
+
+**🎯 주요 개선**
+- **유지보수성**: 상수 변경 시 한 곳에서만 수정
+- **가독성**: 숫자 대신 의미 있는 이름 사용
+- **사용자 경험**: Portrait 모드로 최적화된 일관된 UX
+- **일관성**: 전체 앱에서 동일한 값 사용 보장
+- **단순성**: 불필요한 회전 처리 코드 제거
 
 ### v0.3 보물 등록 플로우 완성 (2026-02-07)
 
@@ -127,7 +146,7 @@ FindIt/
 - 선택 시점 이미지 스냅샷 저장
 - 15% 여백 포함 이미지 크롭
 - Feature Print 추출 및 SwiftData 저장
-- 보물 도감 그리드 UI (2열 레이아웃, 사진/이름/난이도)
+- 보물 도감 그리드 UI (Portrait 2열 / Landscape 3열)
 
 **🔧 해결한 문제**
 - 터치 좌표 정렬: ContourOverlay와 동일한 AspectFill 스케일 적용
@@ -194,6 +213,7 @@ final class TreasureItem {
 - AspectFill crop (9:16 비율)
 - Async/await 패턴으로 프레임 캡처
 - 비동기 세션 설정 (continuation 패턴)
+- **Portrait 고정**: 비디오 방향 90도 고정
 
 #### SegmentationService (FindIt/Services/SegmentationService.swift)
 - `VNGenerateForegroundInstanceMaskRequest` 사용
@@ -206,13 +226,15 @@ final class TreasureItem {
 - `VNGenerateImageFeaturePrintRequest` 사용
 - Feature Print 추출 (인식용 벡터)
 - Feature Print 비교 (computeDistance)
+- **유사도 임계값**: Constants.Vision.SimilarityThreshold (0.3, 0.5, 0.7)
+- MatchLevel 변환: Cold, Warm, Hot, Match
 
 #### CapturePhotoView (FindIt/Views/Capture/CapturePhotoView.swift)
-- 실시간 감지 (0.5초 간격 타이머)
+- 실시간 감지 (Constants.Capture.detectionInterval = 0.5초)
 - GeometryReader로 화면 크기 계산
-- ContourOverlay: AspectFill 스케일 + 5% 확대
-- 선택되지 않은 사물: 초록색 0.3 opacity
-- 선택된 사물: 노란색 0.5 opacity
+- ContourOverlay: AspectFill 스케일 + Constants.Capture.maskScaleFactor (1.05)
+- 선택되지 않은 사물: 초록색 Constants.Capture.unselectedOpacity (0.3)
+- 선택된 사물: 노란색 Constants.Capture.selectedOpacity (0.5)
 - 선택 확인 UI: 취소/확인 버튼
 - 좌표 변환: Vision (normalized) → SwiftUI (points)
 
@@ -226,10 +248,41 @@ final class TreasureItem {
 2. 전체 플로우 테스트 및 버그 수정
 3. 에러 처리 개선
 
-### ⏳ Phase 3: 게임 화면
-1. GameView 기본 구조
-2. 미션 카드 UI
-3. 카메라 프리뷰
+### 🔨 Phase 3: 게임 화면 (Step 3)
+1. GameView 기본 구조 (카메라 프리뷰 + 미션 카드)
+2. 실시간 Feature Print 매칭 (0.5초 간격)
+3. Hot & Cold 피드백 (테두리 색상 변경)
+4. Match 1초 유지 시 성공 판정
+5. 성공 화면 (보물 사진 + "찾았다!" + 홈으로)
+6. HomeView에서 TreasureCard 탭 → GameView 연결
+
+#### GameView 화면 구성
+```
+┌─────────────────────────┐
+│ [X]     "보물을 찾아라!" │  ← 상단 바
+├─────────────────────────┤
+│                         │
+│    [카메라 프리뷰]        │  ← 전체 화면 배경
+│    (실시간 매칭 중)       │
+│                         │
+├─────────────────────────┤
+│ ┌──────────────────┐    │
+│ │ 📷  보물이름       │    │  ← 미션 카드 (하단)
+│ │     힌트: ...     │    │
+│ │     ⭐⭐          │    │
+│ └──────────────────┘    │
+│   "차가워요" / "뜨거워요!" │  ← 상태 텍스트
+└─────────────────────────┘
+ ↑ 테두리 색상이 유사도에 따라 변경
+```
+
+#### 피드백 레벨
+| MatchLevel | 유사도 | 테두리 색 |
+|-----------|-------|----------|
+| Cold | < 0.3 | 투명 |
+| Warm | 0.3~0.5 | 노란색 |
+| Hot | 0.5~0.7 | 주황색 |
+| Match | ≥ 0.7 | 초록색 |
 
 ### ⏳ Phase 4: 실시간 매칭
 1. 실시간 Feature Print 매칭
@@ -257,7 +310,7 @@ final class TreasureItem {
 ```swift
 let widthScale = frameSize.width / maskSize.width
 let heightScale = frameSize.height / maskSize.height
-let scale = max(widthScale, heightScale) * 1.05  // 5% 확대
+let scale = max(widthScale, heightScale) * Constants.Capture.maskScaleFactor
 ```
 
 ### 2. 카메라 세션 설정 오류
@@ -276,9 +329,33 @@ try await withCheckedThrowingContinuation { continuation in
 ### 3. 실시간 성능 최적화
 **문제**: 초기 1.0초 감지 간격이 너무 느림
 
-**해결**: 0.5초로 단축하여 반응성 개선
+**해결**: Constants.Capture.detectionInterval (0.5초)로 단축하여 반응성 개선
 - Vision Framework 처리 시간: ~200ms
 - 0.5초 간격이 적절한 균형점
+
+### 4. 매직 넘버 제거 (2026-02-08)
+**문제**: 코드 전체에 하드코딩된 숫자값 (25개 이상)
+
+**해결**: Constants.swift 생성 및 카테고리별 분류
+```swift
+enum Constants {
+    enum Camera { ... }        // 카메라 설정
+    enum Vision { ... }        // 유사도 임계값
+    enum Capture { ... }       // 캡처 UI
+    enum ItemForm { ... }      // 폼 기본값
+    enum Orientation { ... }   // 회전 설정
+    enum UI { ... }           // 레이아웃
+}
+```
+
+### 5. 화면 방향 최적화 (2026-02-08)
+**문제**: 디바이스 회전 시 레이아웃 깨짐, 카메라 화면에서 가로 모드 부적합
+
+**해결**: AppDelegate로 전체 앱 Portrait 고정
+- AppDelegate에서 `.portrait`만 허용
+- 카메라 촬영 및 텍스트 입력에 최적화된 세로 모드
+- 단순하고 일관된 UX 제공
+- 불필요한 회전 처리 코드 제거
 
 ## 사물 선택 UI/UX 상세
 

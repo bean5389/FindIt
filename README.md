@@ -53,26 +53,20 @@
 FindIt/
 ├── FindItApp.swift
 ├── ContentView.swift
+├── Constants.swift               # 앱 전체 상수 정의 (리팩토링됨)
 ├── Models/
-│   ├── TargetItem.swift          # 물건 모델 (SwiftData)
-│   └── TargetPhoto.swift         # 사진 모델 (Feature Print 포함)
+│   └── TreasureItem.swift        # 보물 아이템 모델 (SwiftData)
 ├── Services/
-│   ├── FeaturePrintService.swift # Vision 벡터 추출/비교
-│   ├── ClassifierService.swift   # CreateML 분류기 (스텁)
-│   ├── RecognitionService.swift  # 하이브리드 인식 조합
-│   ├── SegmentationService.swift # 깊이 기반 객체 세그먼트
-│   └── CameraService.swift       # AVCaptureSession / ARKit LiDAR 관리
-├── ViewModels/
-│   ├── HomeViewModel.swift
-│   ├── RegistrationViewModel.swift
-│   └── GameViewModel.swift
-├── Views/
-│   ├── HomeView.swift            # 도감 Grid + 게임 시작
-│   ├── Registration/             # 등록 플로우 (촬영 → 정보 입력)
-│   ├── Game/                     # 게임 플로우 (미션 → 탐색 → 성공)
-│   └── Components/               # CameraPreviewView
-└── Utilities/
-    └── ImageHelper.swift         # 이미지 변환 유틸
+│   ├── CameraService.swift       # AVCaptureSession 관리
+│   ├── SegmentationService.swift # Vision 기반 사물 감지 (VNGenerateForegroundInstanceMaskRequest)
+│   └── VisionService.swift       # Feature Print 추출 및 유사도 계산
+└── Views/
+    ├── HomeView.swift            # 보물 도감 Grid
+    ├── Capture/
+    │   ├── CapturePhotoView.swift   # 실시간 사물 감지 및 선택
+    │   └── ItemFormView.swift       # 보물 정보 입력 폼
+    └── Game/
+        └── GameView.swift           # 보물찾기 게임 화면 (Hot & Cold 피드백)
 ```
 
 ## 개발 진행 상황
@@ -86,11 +80,39 @@ FindIt/
 | Step 5: ML 파이프라인 | k-NN On-device 학습 + UI 피드백 | ✅ Done |
 | Step 6: 폴리싱 | 애니메이션, 햅틱, 이펙트, 접근성 | ✅ Done |
 
----
+### v0.5 보물찾기 게임 화면 (2026-02-08)
 
-**🎉 모든 단계 완료!** FindIt 앱이 완성되었습니다.
+**✅ 완료**
+- GameView 구현: 카메라 프리뷰 + 실시간 Feature Print 매칭
+- Hot & Cold 피드백: 유사도에 따라 테두리 색상 변경 (Cold/Warm/Hot/Match)
+- Match 1초 유지 시 성공 판정 → 성공 화면 표시
+- 미션 카드 UI: 보물 사진 + 이름 + 힌트 + 난이도 표시
+- HomeView 연동: 보물 카드 탭 → GameView fullScreenCover 표시
+
+## 코드 품질 개선 (2026-02-08)
+
+### 리팩토링 완료
+- ✅ **Constants.swift 생성**: 모든 매직 넘버를 의미 있는 상수로 추출
+  - `Constants.Camera`: 카메라 관련 상수 (회전 각도, 화면 비율 등)
+  - `Constants.Vision`: Vision 관련 상수 (유사도 임계값 등)
+  - `Constants.Capture`: 캡처 UI 관련 상수 (애니메이션, 투명도 등)
+  - `Constants.ItemForm`: 폼 관련 상수 (기본값, 압축 품질 등)
+  - `Constants.Orientation`: 화면 회전 관련 상수 (그리드 컬럼 수)
+  - `Constants.UI`: UI 레이아웃 상수 (크기, 간격, 모서리 반경 등)
+
+- ✅ **화면 방향 최적화**: 전체 앱 Portrait 전용
+  - AppDelegate를 통한 전역 방향 제어
+  - 사물 촬영 및 텍스트 입력에 최적화된 세로 모드
+  - 일관된 사용자 경험 제공
+
+### 개선 효과
+- **유지보수성 향상**: 상수 변경 시 한 곳에서만 수정
+- **가독성 개선**: 숫자 대신 의미 있는 이름 사용
+- **일관성 확보**: 전체 앱에서 동일한 값 사용 보장
+- **사용자 경험 향상**: Portrait 모드로 최적화된 일관된 UX
 
 ## 빌드 요구사항
 
-- Xcode 26.2+
-- iOS 18+ 디바이스. **LiDAR** 기기 권장, 없어도 카메라만으로 동일 플로우 지원 (Vision 전경 분리)
+- Xcode 16.2+
+- iOS 18+ 디바이스
+- Vision Framework 지원 기기 (실시간 사물 감지)
