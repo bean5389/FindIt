@@ -122,9 +122,9 @@ struct CapturePhotoView: View {
             if let previewImage = croppedPreviewImage, let selected = selectedObject {
                 ObjectConfirmationView(
                     previewImage: previewImage,
-                    onConfirm: {
+                    onConfirm: { rotatedImage in
+                        confirmSelection(selected, with: rotatedImage)
                         showConfirmationSheet = false
-                        confirmSelection(selected)
                     },
                     onCancel: {
                         showConfirmationSheet = false
@@ -224,21 +224,15 @@ struct CapturePhotoView: View {
         }
     }
     
-    private func confirmSelection(_ object: DetectedObject) {
+    private func confirmSelection(_ object: DetectedObject, with image: UIImage) {
         Task {
             isProcessing = true
-            
+
             do {
-                // 선택 시점에 저장해둔 이미지 사용
-                guard let image = capturedImage else {
-                    throw CaptureError.noImageAvailable
-                }
-                
-                let croppedImage = cropImage(image, to: object.boundingBox)
-                
-                let featurePrintData = try await visionService.extractFeaturePrint(from: croppedImage)
-                
-                onObjectSelected(croppedImage, featurePrintData)
+                // 회전된 이미지 사용
+                let featurePrintData = try await visionService.extractFeaturePrint(from: image)
+
+                onObjectSelected(image, featurePrintData)
                 
                 dismiss()
             } catch {
@@ -407,8 +401,10 @@ struct TouchableBox: View {
 // MARK: - Object Confirmation View
 struct ObjectConfirmationView: View {
     let previewImage: UIImage
-    let onConfirm: () -> Void
+    let onConfirm: (UIImage) -> Void  // 회전된 이미지를 전달
     let onCancel: () -> Void
+
+    @State private var rotationAngle: Double = 0
 
     var body: some View {
         VStack(spacing: 24) {
@@ -430,13 +426,36 @@ struct ObjectConfirmationView: View {
             .padding()
 
             // 이미지 미리보기
-            Image(uiImage: previewImage)
-                .resizable()
-                .scaledToFit()
-                .frame(maxWidth: .infinity, maxHeight: 400)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .shadow(radius: 10)
-                .padding(.horizontal)
+            ZStack {
+                Image(uiImage: previewImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: 400)
+                    .rotationEffect(Angle(degrees: rotationAngle))
+                    .animation(.easeInOut(duration: 0.3), value: rotationAngle)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .shadow(radius: 10)
+                    .padding(.horizontal)
+
+                // 회전 버튼
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Button {
+                            rotationAngle += 90
+                        } label: {
+                            Image(systemName: "rotate.right")
+                                .font(.title2)
+                                .foregroundStyle(.white)
+                                .padding(12)
+                                .background(.ultraThinMaterial, in: Circle())
+                                .shadow(radius: 5)
+                        }
+                        .padding()
+                    }
+                }
+            }
 
             Text("이 사물을 등록하시겠습니까?")
                 .font(.title3)
@@ -458,7 +477,9 @@ struct ObjectConfirmationView: View {
                 }
 
                 Button {
-                    onConfirm()
+                    // 회전된 이미지 생성
+                    let rotatedImage = rotateImage(previewImage, by: rotationAngle)
+                    onConfirm(rotatedImage)
                 } label: {
                     Text("확인")
                         .font(.headline)
@@ -473,6 +494,46 @@ struct ObjectConfirmationView: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+    }
+
+    // 이미지 회전 헬퍼 함수
+    private func rotateImage(_ image: UIImage, by degrees: Double) -> UIImage {
+        // 0도 또는 360의 배수이면 원본 반환
+        let normalizedDegrees = Int(degrees) % 360
+        if normalizedDegrees == 0 {
+            return image
+        }
+
+        guard let cgImage = image.cgImage else { return image }
+
+        let radians = CGFloat(normalizedDegrees) * .pi / 180
+        var newSize = CGRect(origin: .zero, size: image.size)
+            .applying(CGAffineTransform(rotationAngle: radians))
+            .size
+
+        // 음수 크기 방지
+        newSize.width = abs(newSize.width)
+        newSize.height = abs(newSize.height)
+
+        UIGraphicsBeginImageContextWithOptions(newSize, false, image.scale)
+        guard let context = UIGraphicsGetCurrentContext() else { return image }
+
+        // 회전 중심을 이미지 중앙으로 이동
+        context.translateBy(x: newSize.width / 2, y: newSize.height / 2)
+        context.rotate(by: radians)
+
+        // 이미지 그리기
+        image.draw(in: CGRect(
+            x: -image.size.width / 2,
+            y: -image.size.height / 2,
+            width: image.size.width,
+            height: image.size.height
+        ))
+
+        let rotatedImage = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+
+        return rotatedImage ?? image
     }
 }
 
