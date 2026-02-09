@@ -57,6 +57,12 @@ enum Constants {
         /// 바운딩 박스 모서리 반경
         static let boundingBoxCornerRadius: CGFloat = 12
 
+        /// 터치 영역 확대 비율 (선택을 쉽게 하기 위해)
+        static let touchAreaExpandRatio: CGFloat = 0.2
+
+        /// 화면 경계 마진 (화면 밖으로 나간 객체 제외)
+        static let screenBoundaryMargin: CGFloat = 0.05
+
         /// 선택 애니메이션 지속 시간 (초)
         static let selectionAnimationDuration: TimeInterval = 0.2
     }

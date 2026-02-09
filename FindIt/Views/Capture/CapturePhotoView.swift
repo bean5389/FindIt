@@ -25,18 +25,10 @@ struct CapturePhotoView: View {
             CameraPreviewView(cameraService: cameraService)
                 .ignoresSafeArea()
             
-            // 바운딩 박스 오버레이 & 터치 영역
-            GeometryReader { geometry in
-                ZStack {
-                    // 선택된 사물이 있으면 그것만, 없으면 모든 사물 표시
-                    if let selected = selectedObject {
-                        // 선택된 사물만 표시
-                        BoundingBoxOverlay(
-                            object: selected,
-                            frameSize: geometry.size,
-                            isSelected: true
-                        )
-                    } else {
+            // 바운딩 박스 오버레이 & 터치 영역 (선택 전이고 모달이 안 떠있을 때만)
+            if selectedObject == nil && !showConfirmationSheet {
+                GeometryReader { geometry in
+                    ZStack {
                         // 감지된 모든 사물 표시
                         ForEach(detectedObjects) { object in
                             BoundingBoxOverlay(
@@ -46,7 +38,7 @@ struct CapturePhotoView: View {
                             )
                         }
 
-                        // 터치 영역 (선택 전에만)
+                        // 터치 영역
                         ForEach(detectedObjects) { object in
                             TouchableBox(
                                 object: object,
@@ -56,8 +48,8 @@ struct CapturePhotoView: View {
                         }
                     }
                 }
+                .allowsHitTesting(!isProcessing)
             }
-            .allowsHitTesting(!isProcessing)
             
             // UI Controls
             VStack {
@@ -136,10 +128,20 @@ struct CapturePhotoView: View {
                     },
                     onCancel: {
                         showConfirmationSheet = false
-                        selectedObject = nil
-                        croppedPreviewImage = nil
                     }
                 )
+            }
+        }
+        .onChange(of: showConfirmationSheet) { oldValue, newValue in
+            if newValue {
+                // 모달이 올라올 때: 실시간 감지 멈추기
+                stopRealtimeDetection()
+            } else if oldValue && !newValue {
+                // 모달이 닫힐 때 (스와이프, 밖 터치, 취소 버튼 등): 상태 초기화 및 실시간 감지 재시작
+                selectedObject = nil
+                croppedPreviewImage = nil
+                detectedObjects = []  // 이전 바운딩 박스 제거
+                startRealtimeDetection()
             }
         }
     }
@@ -157,24 +159,42 @@ struct CapturePhotoView: View {
     }
     
     private func startRealtimeDetection() {
+        // 기존 타이머가 있으면 먼저 정리
+        stopRealtimeDetection()
+
         detectionTimer = Timer.scheduledTimer(withTimeInterval: Constants.Capture.detectionInterval, repeats: true) { _ in
             Task {
                 await detectObjectsInCurrentFrame()
             }
         }
     }
-    
+
+    private func stopRealtimeDetection() {
+        detectionTimer?.invalidate()
+        detectionTimer = nil
+    }
+
     private func detectObjectsInCurrentFrame() async {
         guard !isProcessing, selectedObject == nil else { return }
-        
+
         do {
             let image = try await cameraService.capturePhoto()
-            let objects = try await segmentationService.detectObjects(in: image)
-            
+            let allObjects = try await segmentationService.detectObjects(in: image)
+
+            // 화면 경계를 벗어나는 객체 필터링 (완전히 화면 안에 있는 것만)
+            let margin = Constants.Capture.screenBoundaryMargin
+            let visibleObjects = allObjects.filter { object in
+                let box = object.boundingBox
+                return box.minX >= margin &&
+                       box.minY >= margin &&
+                       box.maxX <= 1 - margin &&
+                       box.maxY <= 1 - margin
+            }
+
             await MainActor.run {
                 // 선택되지 않은 경우에만 업데이트
                 if selectedObject == nil {
-                    detectedObjects = objects
+                    detectedObjects = visibleObjects
                 }
             }
         } catch {
@@ -364,11 +384,16 @@ struct TouchableBox: View {
             width: box.width * scaledWidth,
             height: box.height * scaledHeight
         )
-        
+
+        // 터치 영역을 확대하여 선택을 쉽게 만듦
+        let expandRatio = Constants.Capture.touchAreaExpandRatio
+        let touchWidth = scaledBox.width * (1 + expandRatio)
+        let touchHeight = scaledBox.height * (1 + expandRatio)
+
         Rectangle()
             .fill(Color.clear)
             .contentShape(Rectangle())
-            .frame(width: scaledBox.width, height: scaledBox.height)
+            .frame(width: touchWidth, height: touchHeight)
             .position(
                 x: scaledBox.midX,
                 y: scaledBox.midY
