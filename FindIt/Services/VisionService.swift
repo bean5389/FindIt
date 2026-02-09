@@ -111,10 +111,10 @@ class VisionService {
 
 // MARK: - Models
 enum MatchLevel {
-    case cold       // < 0.3
-    case warm       // 0.3 ~ 0.5
-    case hot        // 0.5 ~ 0.7
-    case match      // >= 0.7
+    case cold       // < 0.35
+    case warm       // 0.35 ~ 0.45
+    case hot        // 0.45 ~ 0.6
+    case match      // >= 0.6
     
     var description: String {
         switch self {
