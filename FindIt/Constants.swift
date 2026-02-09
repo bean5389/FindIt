@@ -27,16 +27,16 @@ enum Constants {
         /// Feature Print 거리 정규화 계수
         static let distanceNormalizationFactor: Float = 2.0
         
-        /// 유사도 임계값
+        /// 유사도 임계값 (세그먼테이션 크롭 기준)
         enum SimilarityThreshold {
-            /// 매치 임계값 (≥ 0.7)
-            static let match: Float = 0.7
-            
-            /// 뜨거워요 임계값 (0.5 ~ 0.7)
-            static let hot: Float = 0.5
-            
-            /// 따뜻해요 임계값 (0.3 ~ 0.5)
-            static let warm: Float = 0.3
+            /// 매치 임계값 (≥ 0.6) - 개별 사물 크롭 비교 시 정답 수준
+            static let match: Float = 0.6
+
+            /// 뜨거워요 임계값 (0.45 ~ 0.6) - 매우 유사한 사물
+            static let hot: Float = 0.45
+
+            /// 따뜻해요 임계값 (0.35 ~ 0.45) - 유사한 사물
+            static let warm: Float = 0.35
         }
     }
     
@@ -104,6 +104,25 @@ enum Constants {
 
         /// 감지 바운딩 박스 선 두께
         static let detectionBoxLineWidth: CGFloat = 3
+        
+        // MARK: - Animation
+        /// 성공 화면 전환 지속 시간 (초)
+        static let successTransitionDuration: TimeInterval = 0.6
+        
+        /// 성공 화면 전환 댐핑 계수
+        static let successTransitionDamping: CGFloat = 0.7
+        
+        /// 상태 텍스트 펄스 응답 시간 (초)
+        static let statusPulseResponse: TimeInterval = 0.3
+        
+        /// 바운딩 박스 색상 전환 지속 시간 (초)
+        static let boxColorTransitionDuration: TimeInterval = 0.3
+        
+        /// 바운딩 박스 맥동 지속 시간 (초)
+        static let boxPulseDuration: TimeInterval = 1.0
+        
+        /// 힌트 스케일 응답 시간 (초)
+        static let hintScaleResponse: TimeInterval = 0.4
     }
     
     // MARK: - UI
