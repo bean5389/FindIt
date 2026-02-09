@@ -23,13 +23,13 @@ struct CapturePhotoView: View {
             CameraPreviewView(cameraService: cameraService)
                 .ignoresSafeArea()
             
-            // 윤곽선 오버레이 & 터치 영역
+            // 바운딩 박스 오버레이 & 터치 영역
             GeometryReader { geometry in
                 ZStack {
                     // 선택된 사물이 있으면 그것만, 없으면 모든 사물 표시
                     if let selected = selectedObject {
                         // 선택된 사물만 표시
-                        ContourOverlay(
+                        BoundingBoxOverlay(
                             object: selected,
                             frameSize: geometry.size,
                             isSelected: true
@@ -37,13 +37,13 @@ struct CapturePhotoView: View {
                     } else {
                         // 감지된 모든 사물 표시
                         ForEach(detectedObjects) { object in
-                            ContourOverlay(
+                            BoundingBoxOverlay(
                                 object: object,
                                 frameSize: geometry.size,
                                 isSelected: false
                             )
                         }
-                        
+
                         // 터치 영역 (선택 전에만)
                         ForEach(detectedObjects) { object in
                             TouchableBox(
@@ -119,7 +119,7 @@ struct CapturePhotoView: View {
                             .padding()
                             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                     } else {
-                        Text("초록색 윤곽선을 탭하거나\n사물을 직접 탭해주세요")
+                        Text("초록색 박스를 탭하거나\n사물을 직접 탭해주세요")
                             .font(.headline)
                             .multilineTextAlignment(.center)
                             .foregroundStyle(.white)
@@ -294,29 +294,39 @@ struct CameraPreviewView: UIViewRepresentable {
     }
 }
 
-struct ContourOverlay: View {
+struct BoundingBoxOverlay: View {
     let object: DetectedObject
     let frameSize: CGSize
     let isSelected: Bool
-    
+
     var body: some View {
+        let box = object.boundingBox
         let maskSize = object.maskImage.size
+
+        // 마스크 이미지를 화면 크기에 맞게 스케일
         let widthScale = frameSize.width / maskSize.width
         let heightScale = frameSize.height / maskSize.height
         let scale = max(widthScale, heightScale) * Constants.Capture.maskScaleFactor
-        
+
         let scaledWidth = maskSize.width * scale
         let scaledHeight = maskSize.height * scale
+
+        // 중앙 정렬 오프셋
         let offsetX = (frameSize.width - scaledWidth) / 2
         let offsetY = (frameSize.height - scaledHeight) / 2
-        
-        Image(uiImage: object.maskImage)
-            .resizable()
-            .frame(width: scaledWidth, height: scaledHeight)
-            .colorMultiply(isSelected ? .yellow : .green)
-            .opacity(isSelected ? Constants.Capture.selectedOpacity : Constants.Capture.unselectedOpacity)
-            .blendMode(.screen)
-            .offset(x: offsetX, y: offsetY)
+
+        // bounding box를 스케일된 좌표계로 변환
+        let scaledBox = CGRect(
+            x: box.minX * scaledWidth + offsetX,
+            y: box.minY * scaledHeight + offsetY,
+            width: box.width * scaledWidth,
+            height: box.height * scaledHeight
+        )
+
+        RoundedRectangle(cornerRadius: Constants.Capture.boundingBoxCornerRadius)
+            .stroke(isSelected ? Color.yellow : Color.green, lineWidth: Constants.Capture.boundingBoxLineWidth)
+            .frame(width: scaledBox.width, height: scaledBox.height)
+            .position(x: scaledBox.midX, y: scaledBox.midY)
             .allowsHitTesting(false)
             .animation(.easeInOut(duration: Constants.Capture.selectionAnimationDuration), value: isSelected)
     }

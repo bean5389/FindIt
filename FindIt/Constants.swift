@@ -44,19 +44,19 @@ enum Constants {
     enum Capture {
         /// 실시간 감지 주기 (초)
         static let detectionInterval: TimeInterval = 0.5
-        
+
         /// 바운딩 박스 확장 비율 (15%)
         static let boundingBoxExpandRatio: CGFloat = 0.15
-        
+
         /// 마스크 이미지 스케일 팩터 (5% 확대)
         static let maskScaleFactor: CGFloat = 1.05
-        
-        /// 선택되지 않은 윤곽선 투명도
-        static let unselectedOpacity: Double = 0.3
-        
-        /// 선택된 윤곽선 투명도
-        static let selectedOpacity: Double = 0.5
-        
+
+        /// 바운딩 박스 선 두께
+        static let boundingBoxLineWidth: CGFloat = 3
+
+        /// 바운딩 박스 모서리 반경
+        static let boundingBoxCornerRadius: CGFloat = 12
+
         /// 선택 애니메이션 지속 시간 (초)
         static let selectionAnimationDuration: TimeInterval = 0.2
     }
