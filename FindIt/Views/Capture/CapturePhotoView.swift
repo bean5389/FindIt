@@ -10,6 +10,8 @@ struct CapturePhotoView: View {
     @State private var detectedObjects: [DetectedObject] = []
     @State private var selectedObject: DetectedObject?
     @State private var capturedImage: UIImage?  // 선택 시점의 이미지 저장
+    @State private var croppedPreviewImage: UIImage?  // 크롭된 미리보기 이미지
+    @State private var showConfirmationSheet = false
     @State private var isProcessing = false
     @State private var errorMessage: String?
     @State private var showError = false
@@ -86,39 +88,20 @@ struct CapturePhotoView: View {
                 
                 Spacer()
                 
-                // 하단: 안내 메시지 & 캡처 버튼
+                // 하단: 안내 메시지
                 VStack(spacing: 16) {
                     if isProcessing {
                         ProgressView()
                             .tint(.white)
                         Text("처리 중...")
                             .foregroundStyle(.white)
-                    } else if let selected = selectedObject {
-                        Text("선택한 사물이 맞나요?")
-                            .font(.headline)
-                            .foregroundStyle(.white)
-                        
-                        HStack(spacing: 20) {
-                            Button("취소") {
-                                selectedObject = nil
-                                // detectedObjects는 자동으로 다시 업데이트됨
-                            }
-                            .buttonStyle(.bordered)
-                            .tint(.red)
-                            
-                            Button("확인") {
-                                confirmSelection(selected)
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .tint(.green)
-                        }
                     } else if detectedObjects.isEmpty {
                         Text("사물을 화면에 담아주세요")
                             .font(.headline)
                             .foregroundStyle(.white)
                             .padding()
                             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-                    } else {
+                    } else if selectedObject == nil {
                         Text("초록색 박스를 탭하거나\n사물을 직접 탭해주세요")
                             .font(.headline)
                             .multilineTextAlignment(.center)
@@ -142,6 +125,22 @@ struct CapturePhotoView: View {
             Button("확인", role: .cancel) { }
         } message: {
             Text(errorMessage ?? "알 수 없는 오류가 발생했습니다.")
+        }
+        .sheet(isPresented: $showConfirmationSheet) {
+            if let previewImage = croppedPreviewImage, let selected = selectedObject {
+                ObjectConfirmationView(
+                    previewImage: previewImage,
+                    onConfirm: {
+                        showConfirmationSheet = false
+                        confirmSelection(selected)
+                    },
+                    onCancel: {
+                        showConfirmationSheet = false
+                        selectedObject = nil
+                        croppedPreviewImage = nil
+                    }
+                )
+            }
         }
     }
     
@@ -187,9 +186,13 @@ struct CapturePhotoView: View {
         Task {
             do {
                 let image = try await cameraService.capturePhoto()
+                let cropped = cropImage(image, to: object.boundingBox)
+
                 await MainActor.run {
                     capturedImage = image  // 선택 시점의 이미지 저장
+                    croppedPreviewImage = cropped  // 크롭된 미리보기 이미지
                     selectedObject = object
+                    showConfirmationSheet = true  // 모달 표시
                 }
             } catch {
                 // 캡처 실패 시 에러 처리
@@ -373,6 +376,78 @@ struct TouchableBox: View {
             .onTapGesture {
                 onTap()
             }
+    }
+}
+
+// MARK: - Object Confirmation View
+struct ObjectConfirmationView: View {
+    let previewImage: UIImage
+    let onConfirm: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(spacing: 24) {
+            // 상단 바
+            HStack {
+                Text("선택한 사물 확인")
+                    .font(.headline)
+
+                Spacer()
+
+                Button {
+                    onCancel()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding()
+
+            // 이미지 미리보기
+            Image(uiImage: previewImage)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: .infinity, maxHeight: 400)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .shadow(radius: 10)
+                .padding(.horizontal)
+
+            Text("이 사물을 등록하시겠습니까?")
+                .font(.title3)
+                .fontWeight(.medium)
+
+            Spacer()
+
+            // 버튼
+            HStack(spacing: 16) {
+                Button {
+                    onCancel()
+                } label: {
+                    Text("취소")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(.red, in: RoundedRectangle(cornerRadius: 12))
+                }
+
+                Button {
+                    onConfirm()
+                } label: {
+                    Text("확인")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(.green, in: RoundedRectangle(cornerRadius: 12))
+                }
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 32)
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 }
 
